@@ -46,4 +46,5 @@ if (ENABLE_PIP_MIPS_EMU_TESTS)
 
     add_pip_mips_emu_test(FileTest)
     add_pip_mips_emu_test(MemoryTest)
+    add_pip_mips_emu_test(NamedEntryMapTest)
 endif()
