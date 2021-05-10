@@ -13,6 +13,7 @@ add_library(pip-mips-emu STATIC
     ${PROJECT_SOURCE_DIR}/Source/Common.cc
     ${PROJECT_SOURCE_DIR}/Source/File.cc
     ${PROJECT_SOURCE_DIR}/Source/Memory.cc
+    ${PROJECT_SOURCE_DIR}/Source/NamedEntryMap.cc
 )
 target_include_directories(pip-mips-emu PUBLIC ${PROJECT_SOURCE_DIR}/Public)
 
