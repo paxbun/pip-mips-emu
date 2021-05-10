@@ -10,7 +10,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Library definitions
 add_library(pip-mips-emu STATIC
-    ${PROJECT_SOURCE_DIR}/Source/Lib.cc
+    ${PROJECT_SOURCE_DIR}/Source/Common.cc
+    ${PROJECT_SOURCE_DIR}/Source/Memory.cc
 )
 target_include_directories(pip-mips-emu PUBLIC ${PROJECT_SOURCE_DIR}/Public)
 
@@ -41,5 +42,5 @@ if (ENABLE_PIP_MIPS_EMU_TESTS)
         unset(TEST_NAME)
     endfunction()
 
-    add_pip_mips_emu_test(SimpleTest)
+    add_pip_mips_emu_test(MemoryTest)
 endif()
