@@ -114,11 +114,6 @@ class Memory
     bool IsTerminated() const noexcept;
 
     /// <summary>
-    /// Advances the value of the PC.
-    /// </summary>
-    void AdvancePC() noexcept;
-
-    /// <summary>
     /// Loads data to the given segment.
     /// </summary>
     void Load(Address::BaseType base, std::vector<uint8_t> const& data) noexcept;

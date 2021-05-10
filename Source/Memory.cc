@@ -62,11 +62,6 @@ bool Memory::IsTerminated() const noexcept
     return GetRegister(PC) >= static_cast<uint32_t>(Address::MakeText(_textSize));
 }
 
-void Memory::AdvancePC() noexcept
-{
-    SetRegister(PC, GetRegister(PC) + 4);
-}
-
 void Memory::Load(Address::BaseType base, std::vector<uint8_t> const& data) noexcept
 {
     auto& segment = GetSegmentByBase(base);
