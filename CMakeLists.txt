@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Library definitions
 add_library(pip-mips-emu STATIC
     ${PROJECT_SOURCE_DIR}/Source/Common.cc
+    ${PROJECT_SOURCE_DIR}/Source/Emulator.cc
     ${PROJECT_SOURCE_DIR}/Source/File.cc
     ${PROJECT_SOURCE_DIR}/Source/Memory.cc
     ${PROJECT_SOURCE_DIR}/Source/NamedEntryMap.cc
