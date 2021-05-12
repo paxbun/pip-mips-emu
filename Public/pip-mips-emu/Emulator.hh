@@ -9,8 +9,28 @@
 #include <pip-mips-emu/NamedEntryMap.hh>
 
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
+
+/// <summary>
+/// Indicates the result of each clock
+/// </summary>
+enum class TickTockResult
+{
+    UnknownError = -1,
+    Success      = 0,
+
+    /// <summary>
+    /// The program is already terminated.
+    /// </summary>
+    AlreadyTerminated,
+
+    /// <summary>
+    /// The current instruction references invalid memory.
+    /// </summary>
+    MemoryOutOfRange,
+};
 
 /// <summary>
 /// Manages datapath and control unit components.
@@ -22,6 +42,7 @@ class Emulator
   private:
     std::vector<DatapathPtr>   _tickDatapaths, _tockDatapaths, _datapaths;
     std::vector<ControllerPtr> _controllers;
+    HandlerPtr                 _handler;
     // std::unordered_map<std::string, uint32_t> _namedRegisters;
     // std::unordered_map<std::string, uint32_t> _namedSignals;
     std::vector<uint16_t> _controls;
@@ -29,6 +50,7 @@ class Emulator
   private:
     Emulator(std::vector<std::pair<DatapathPtr, TickTockType>>&& datapaths,
              std::vector<ControllerPtr>&&                        controllers,
+             HandlerPtr&&                                        handler,
              std::unordered_map<std::string, uint32_t>&&         namedRegisters,
              std::unordered_map<std::string, uint32_t>&&         namedSignals);
 
@@ -38,7 +60,18 @@ class Emulator
     ~Emulator()                     = default;
 
   public:
-    void TickTock(Memory& memory);
+    /// <summary>
+    /// Runs one instruction and mutate the given memory. If the result is not
+    /// <c>TickTockResult::Success</c>, the memory is not mutated.
+    /// </summary>
+    /// <param name="memory">The memory to mutate</param>
+    /// <returns>Execution result</returns>
+    TickTockResult TickTock(Memory& memory) noexcept;
+
+    /// <summary>
+    /// Returns <c>true</c> if the program is terminated.
+    /// </summary>
+    bool IsTerminated(Memory const& memory) const noexcept;
 };
 
 /// <summary>
@@ -51,6 +84,7 @@ class EmulatorBuilder
     std::vector<ControllerPtr>                        _controllers;
     RegisterMap                                       _regMap;
     SignalMap                                         _sigMap;
+    HandlerPtr                                        _handler;
 
   public:
     EmulatorBuilder() {}
@@ -61,9 +95,10 @@ class EmulatorBuilder
     /// </summary>
     /// <typeparam name="T">Type of the component</typeparam>
     template <typename T, std::enable_if_t<std::is_base_of_v<Datapath, T>, int> = 0>
-    void AddDatapath()
+    EmulatorBuilder& AddDatapath()
     {
         AddDatapath(std::make_unique<T>());
+        return *this;
     }
 
     /// <summary>
@@ -71,9 +106,21 @@ class EmulatorBuilder
     /// </summary>
     /// <typeparam name="T">Type of the component</typeparam>
     template <typename T, std::enable_if_t<std::is_base_of_v<Controller, T>, int> = 0>
-    void AddController()
+    EmulatorBuilder& AddController()
     {
         AddController(std::make_unique<T>());
+        return *this;
+    }
+
+    /// <summary>
+    /// Adds a handler.
+    /// </summary>
+    /// <typeparam name="T">Type of the handler</typeparam>
+    template <typename T, std::enable_if_t<std::is_base_of_v<Handler, T>, int> = 0>
+    EmulatorBuilder& AddHandler()
+    {
+        AddHandler(std::make_unique<T>());
+        return *this;
     }
 
     /// <summary>
@@ -96,6 +143,12 @@ class EmulatorBuilder
     /// </summary>
     /// <param name="control">Pointer to the component</param>
     void AddController(ControllerPtr&& component);
+
+    /// <summary>
+    /// Adds a handler.
+    /// </summary>
+    /// <typeparam name="T">Pointer to the handler</typeparam>
+    void AddHandler(HandlerPtr&& handler);
 };
 
 #endif

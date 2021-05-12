@@ -119,10 +119,28 @@ class Datapath
 
 using DatapathPtr = std::unique_ptr<Datapath>;
 
-#define DATAPATH_INIT()                                                                            \
-    virtual void Initialize(RegisterMap& regMap, SignalMap& sigMap, TickTockType& tickTock) override
+#define DATAPATH_DECLARE_FUNCTIONS()                                                               \
+  public:                                                                                          \
+    virtual void Initialize(RegisterMap& regMap, SignalMap& sigMap, TickTockType& tickTock)        \
+        override;                                                                                  \
+    virtual std::vector<Delta> Execute(Memory const& memory) const override;
 
-#define DATAPATH_EXEC() virtual std::vector<Delta> Execute(Memory const& memory) const override
+#define DATAPATH_INIT(ClassName)                                                                   \
+    void ClassName::Initialize(RegisterMap& regMap, SignalMap& sigMap, TickTockType& tickTock)
+
+#define DATAPATH_EXEC(ClassName) std::vector<Delta> ClassName::Execute(Memory const& memory) const
+
+#define FORWARD_REGISTER(from, to)                                                                 \
+    {                                                                                              \
+        uint32_t const registerValue = memory.GetRegister((from));                                 \
+        rtn.push_back(Delta::Register((to), registerValue));                                       \
+    }
+
+#define DEFINE_DELTAS() std::vector<Delta> rtn
+
+#define ADD_DELTA(delta) rtn.push_back((delta))
+
+#define RETURN_DELTAS() return rtn
 
 #define REGISTER_USAGE(registerName, registerUsage)                                                \
     regMap.AddEntry(#registerName, &registerName, registerUsage)
@@ -176,5 +194,31 @@ using ControllerPtr = std::unique_ptr<Controller>;
 #define CONTROLLER_EXEC() virtual std::vector<Control> Execute(Memory const& memory) const override
 
 #define MAKE_SIGNAL(signalName) sigMap.AddEntry(#signalName, &signalName, NamedEntryUsage::Write)
+
+#define DEFINE_CONTROLS() std::vector<Control> rtn
+
+#define ADD_CONTROL(control) rtn.push_back((control))
+
+#define RETURN_CONTROLS() return rtn
+
+/// <summary>
+/// Implements termination condition check.
+/// </summary>
+class Handler
+{
+  public:
+    /// <summary>
+    /// Implementers must create named registers in this function. The indices will be
+    /// assigned automatically after <c>Handler::Initialize</c> is called.
+    /// </summary>
+    virtual void Initialize(RegisterMap& regMap) = 0;
+
+    /// <summary>
+    /// Returns <c>true</c> if the program is terminated.
+    /// </summary>
+    virtual bool IsTerminated(Memory const& memory) noexcept = 0;
+};
+
+using HandlerPtr = std::unique_ptr<Handler>;
 
 #endif

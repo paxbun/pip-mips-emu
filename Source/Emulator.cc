@@ -59,35 +59,58 @@ void ApplyDeltas(Memory&                                memory,
 
 Emulator::Emulator(std::vector<std::pair<DatapathPtr, TickTockType>>&& datapaths,
                    std::vector<ControllerPtr>&&                        controllers,
+                   HandlerPtr&&                                        handler,
                    std::unordered_map<std::string, uint32_t>&&         namedRegisters,
                    std::unordered_map<std::string, uint32_t>&&         namedSignals) :
     _tickDatapaths(FilterDatapath(std::move(datapaths), TickTockType::Tick)),
     _tockDatapaths(FilterDatapath(std::move(datapaths), TickTockType::Tock)),
     _datapaths(FilterDatapath(std::move(datapaths), TickTockType::NoPreference)),
-    _controllers { std::move(controllers) },
+    _controllers(std::move(controllers)),
+    _handler { std::move(handler) },
     // _namedRegisters { std::move(namedRegisters) },
     // _namedSignals { std::move(namedSignals) },
     _controls(namedSignals.size(), 0)
 {}
 
-void Emulator::TickTock(Memory& memory)
+TickTockResult Emulator::TickTock(Memory& memory) noexcept
 {
-    for (auto const& controller : _controllers)
+    if (IsTerminated(memory))
+        return TickTockResult::AlreadyTerminated;
+
+    try
     {
-        for (auto const& control : controller->Execute(memory))
-            _controls[control.signal] = control.value;
+        for (auto const& controller : _controllers)
+        {
+            for (auto const& control : controller->Execute(memory))
+                _controls[control.signal] = control.value;
+        }
+
+        std::vector<std::vector<Delta>> tickDeltas;
+        for (auto const& datapath : _datapaths) tickDeltas.push_back(datapath->Execute(memory));
+        for (auto const& datapath : _tickDatapaths) tickDeltas.push_back(datapath->Execute(memory));
+
+        ApplyDeltas(memory, _controls, tickDeltas);
+
+        std::vector<std::vector<Delta>> tockDeltas;
+        for (auto const& datapath : _tockDatapaths) tockDeltas.push_back(datapath->Execute(memory));
+
+        ApplyDeltas(memory, _controls, tockDeltas);
+
+        return TickTockResult::Success;
     }
+    catch (std::out_of_range const&)
+    {
+        return TickTockResult::MemoryOutOfRange;
+    }
+    catch (...)
+    {
+        return TickTockResult::UnknownError;
+    }
+}
 
-    std::vector<std::vector<Delta>> tickDeltas;
-    for (auto const& datapath : _datapaths) tickDeltas.push_back(datapath->Execute(memory));
-    for (auto const& datapath : _tickDatapaths) tickDeltas.push_back(datapath->Execute(memory));
-
-    ApplyDeltas(memory, _controls, tickDeltas);
-
-    std::vector<std::vector<Delta>> tockDeltas;
-    for (auto const& datapath : _tockDatapaths) tockDeltas.push_back(datapath->Execute(memory));
-
-    ApplyDeltas(memory, _controls, tockDeltas);
+bool Emulator::IsTerminated(Memory const& memory) const noexcept
+{
+    return _handler->IsTerminated(memory);
 }
 
 void EmulatorBuilder::AddDatapath(DatapathPtr&& component)
@@ -103,17 +126,23 @@ void EmulatorBuilder::AddController(ControllerPtr&& component)
     _controllers.push_back(std::move(component));
 }
 
+void EmulatorBuilder::AddHandler(HandlerPtr&& handler)
+{
+    _handler = std::move(handler);
+}
+
 std::pair<Emulator, Memory> EmulatorBuilder::Build(std::vector<uint8_t>&& text,
                                                    std::vector<uint8_t>&& data)
 {
+    if (!_handler)
+        throw std::runtime_error { "No handler is given" };
+
     auto registers = _regMap.Build();
     auto signals   = _sigMap.Build();
 
     Emulator emulator {
-        std::move(_datapaths),
-        std::move(_controllers),
-        std::move(registers),
-        std::move(signals),
+        std::move(_datapaths), std::move(_controllers), std::move(_handler),
+        std::move(registers),  std::move(signals),
     };
 
     Memory memory {
