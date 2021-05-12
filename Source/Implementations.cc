@@ -322,6 +322,11 @@ DATAPATH_EXEC(InstructionDecode)
     {
         regWrite = 1;
     }
+    else if (IsOneOf(operation, BIFormatOp::BEQ, BIFormatOp::BNE))
+    {
+        uint32_t const target = newPCValue + SignExtend(immediate, 16) * 4;
+        ADD_DELTA((Delta::Conditioned(PC, target, nextPCType, NextPCType::BranchResultID)));
+    }
     else if (IsOneOf(operation, OIFormatOp::LB, OIFormatOp::LW))
     {
         regWrite = 1;
@@ -392,6 +397,7 @@ DATAPATH_INIT(Execution)
     REGISTER_READ(ID_EX_RAValue);
 
     REGISTER_WRITE(EX_MEM_PC);
+    REGISTER_WRITE(EX_MEM_NextPC);
     REGISTER_WRITE(EX_MEM_Instr);
 
     REGISTER_READ_WRITE(EX_MEM_RegWrite);
@@ -420,6 +426,7 @@ DATAPATH_EXEC(Execution)
     DEFINE_DELTAS();
 
     FORWARD_REGISTER(ID_EX_PC, EX_MEM_PC);
+    FORWARD_REGISTER(ID_EX_NextPC, EX_MEM_NextPC);
 
     uint32_t const instruction = memory.GetRegister(ID_EX_Instr);
     uint32_t const regWrite    = memory.GetRegister(ID_EX_RegWrite);
@@ -588,6 +595,7 @@ DATAPATH_INIT(MemoryAccess)
 {
     // Registers to read
     REGISTER_READ(EX_MEM_PC);
+    REGISTER_READ(EX_MEM_NextPC);
     REGISTER_READ(EX_MEM_Instr);
 
     REGISTER_READ(EX_MEM_RegWrite);
@@ -618,6 +626,11 @@ DATAPATH_INIT(MemoryAccess)
 
     // Registers to write
     REGISTER_READ_WRITE(MEM_WB_ReadData);
+
+    REGISTER_WRITE(PC);
+
+    // Signals
+    SIGNAL(nextPCType);
 }
 
 DATAPATH_EXEC(MemoryAccess)
@@ -636,23 +649,21 @@ DATAPATH_EXEC(MemoryAccess)
     FORWARD_REGISTER(EX_MEM_RAWrite, MEM_WB_RAWrite);
     FORWARD_REGISTER(EX_MEM_RAValue, MEM_WB_RAValue);
 
+    uint32_t const newPCValue  = memory.GetRegister(EX_MEM_NextPC);
     uint32_t const instruction = memory.GetRegister(EX_MEM_Instr);
     uint32_t const memoryRead  = memory.GetRegister(EX_MEM_MemRead);
     uint32_t const memoryWrite = memory.GetRegister(EX_MEM_MemWrite);
     uint32_t const operation   = (instruction >> 26) & 0b111111;
+    uint32_t const immediate   = (instruction >> 0) & 0xFFFF;
 
-    uint32_t       readData       = 0;
-    uint32_t       writeData      = memory.GetRegister(EX_MEM_Reg2Value);
-    uint32_t const mem_wb_destReg = memory.GetRegister(MEM_WB_DestReg);
-    if (memory.GetRegister(MEM_WB_RegWrite) && memory.GetRegister(MEM_WB_MemRead) && mem_wb_destReg)
+    if (IsOneOf(operation, BIFormatOp::BEQ, BIFormatOp::BNE))
     {
-        if (mem_wb_destReg == EX_MEM_Reg2)
-            writeData = memory.GetRegister(MEM_WB_ReadData);
+        uint32_t const target = newPCValue + SignExtend(immediate, 16) * 4;
+        ADD_DELTA((Delta::Conditioned(PC, target, nextPCType, NextPCType::BranchResultMem)));
     }
 
-    // TODO
-
-    Address const address = Address::MakeFromWord(memory.GetRegister(EX_MEM_ALUResult));
+    uint32_t      readData = 0;
+    Address const address  = Address::MakeFromWord(memory.GetRegister(EX_MEM_ALUResult));
     if (memoryRead)
     {
         if ((operation & 0b11) == 0b11)
@@ -662,6 +673,15 @@ DATAPATH_EXEC(MemoryAccess)
     }
     if (memoryWrite)
     {
+        uint32_t       writeData      = memory.GetRegister(EX_MEM_Reg2Value);
+        uint32_t const mem_wb_destReg = memory.GetRegister(MEM_WB_DestReg);
+        if (memory.GetRegister(MEM_WB_RegWrite) && memory.GetRegister(MEM_WB_MemRead)
+            && mem_wb_destReg)
+        {
+            if (mem_wb_destReg == EX_MEM_Reg2)
+                writeData = memory.GetRegister(MEM_WB_ReadData);
+        }
+
         if ((operation & 0b11) == 0b11)
             ADD_DELTA(Delta::MemoryWord(address, writeData));
         else

@@ -26,10 +26,11 @@ class DefaultHandler : public Handler
 
 enum class NextPCType : uint16_t
 {
-    AdvancedPC   = 0,
-    JumpResult   = 1,
-    BranchResult = 2,
-    NotMutated   = 3,
+    AdvancedPC      = 0,
+    JumpResult      = 1,
+    BranchResultID  = 2,
+    BranchResultMem = 3,
+    NotMutated      = 4,
 };
 
 enum class PipelineState : uint16_t
@@ -147,6 +148,7 @@ class Execution : public Datapath
 
     // Registers to forward
     uint32_t EX_MEM_PC;
+    uint32_t EX_MEM_NextPC;
     uint32_t EX_MEM_Instr;
 
     uint32_t EX_MEM_RegWrite;
@@ -180,6 +182,7 @@ class MemoryAccess : public Datapath
   private:
     // Registers to read
     uint32_t EX_MEM_PC;
+    uint32_t EX_MEM_NextPC;
     uint32_t EX_MEM_Instr;
 
     uint32_t EX_MEM_RegWrite;
@@ -210,6 +213,11 @@ class MemoryAccess : public Datapath
 
     // Registers to write
     uint32_t MEM_WB_ReadData;
+
+    uint32_t PC;
+
+    // Signals
+    uint32_t nextPCType;
 };
 
 class WriteBack : public Datapath
