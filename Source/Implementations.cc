@@ -120,11 +120,11 @@ HANDLER_DUMP_MEMORY(DefaultHandler)
 
 #pragma endregion
 
-// ------------------------------------ NextPCController  -------------------------------------- //
+// --------------------------------- PipelineStateController ----------------------------------- //
 
-#pragma region NextPCController
+#pragma region PipelineStateController
 
-CONTROLLER_INIT(NextPCController)
+CONTROLLER_INIT(PipelineStateController)
 {
     REGISTER_READ(IF_ID_Instr);
 
@@ -135,7 +135,7 @@ CONTROLLER_INIT(NextPCController)
     MAKE_SIGNAL(pipelineState);
 }
 
-CONTROLLER_EXEC(NextPCController)
+CONTROLLER_EXEC(PipelineStateController)
 {
     DEFINE_CONTROLS();
 
@@ -175,7 +175,7 @@ CONTROLLER_EXEC(NextPCController)
     RETURN_CONTROLS();
 }
 
-#pragma endregion NextPCController
+#pragma endregion PipelineStateController
 
 // ------------------------------------ InstructionFetch  -------------------------------------- //
 
@@ -649,6 +649,7 @@ DATAPATH_EXEC(MemoryAccess)
     FORWARD_REGISTER(EX_MEM_RAWrite, MEM_WB_RAWrite);
     FORWARD_REGISTER(EX_MEM_RAValue, MEM_WB_RAValue);
 
+    uint32_t const aluResult   = memory.GetRegister(EX_MEM_ALUResult);
     uint32_t const newPCValue  = memory.GetRegister(EX_MEM_NextPC);
     uint32_t const instruction = memory.GetRegister(EX_MEM_Instr);
     uint32_t const memoryRead  = memory.GetRegister(EX_MEM_MemRead);
@@ -659,11 +660,13 @@ DATAPATH_EXEC(MemoryAccess)
     if (IsOneOf(operation, BIFormatOp::BEQ, BIFormatOp::BNE))
     {
         uint32_t const target = newPCValue + SignExtend(immediate, 16) * 4;
-        ADD_DELTA((Delta::Conditioned(PC, target, nextPCType, NextPCType::BranchResultMem)));
+        ADD_DELTA((Delta::Conditioned(PC, target, nextPCType, NextPCType::BranchResultMemJump)));
+        ADD_DELTA(
+            (Delta::Conditioned(PC, newPCValue, nextPCType, NextPCType::BranchResultMemRestore)));
     }
 
     uint32_t      readData = 0;
-    Address const address  = Address::MakeFromWord(memory.GetRegister(EX_MEM_ALUResult));
+    Address const address  = Address::MakeFromWord(aluResult);
     if (memoryRead)
     {
         if ((operation & 0b11) == 0b11)

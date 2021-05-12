@@ -26,11 +26,12 @@ class DefaultHandler : public Handler
 
 enum class NextPCType : uint16_t
 {
-    AdvancedPC      = 0,
-    JumpResult      = 1,
-    BranchResultID  = 2,
-    BranchResultMem = 3,
-    NotMutated      = 4,
+    AdvancedPC             = 0,
+    JumpResult             = 1,
+    BranchResultID         = 2,
+    BranchResultMemJump    = 3,
+    BranchResultMemRestore = 4,
+    NotMutated             = 5,
 };
 
 enum class PipelineState : uint16_t
@@ -41,7 +42,7 @@ enum class PipelineState : uint16_t
     Flushed3 = 3,
 };
 
-class NextPCController : public Controller
+class PipelineStateController : public Controller
 {
     CONTROLLER_DECLARE_FUNCTIONS();
 
@@ -55,14 +56,6 @@ class NextPCController : public Controller
     // Signals
     uint32_t nextPCType;
     uint32_t pipelineState;
-};
-
-class StallController : public Controller
-{
-    CONTROLLER_DECLARE_FUNCTIONS();
-
-  private:
-    // Registers to read
 };
 
 class InstructionFetch : public Datapath
