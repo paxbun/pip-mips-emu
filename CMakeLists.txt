@@ -46,6 +46,7 @@ if (ENABLE_PIP_MIPS_EMU_TESTS)
         unset(TEST_NAME)
     endfunction()
 
+    add_pip_mips_emu_test(EmulationTest)
     add_pip_mips_emu_test(FileTest)
     add_pip_mips_emu_test(MemoryTest)
     add_pip_mips_emu_test(NamedEntryMapTest)
