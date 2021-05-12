@@ -221,4 +221,11 @@ class Handler
 
 using HandlerPtr = std::unique_ptr<Handler>;
 
+#define HANDLER_DECLARE_FUNCTIONS()                                                                \
+  public:                                                                                          \
+    virtual void Initialize(RegisterMap& regMap) override;                                         \
+    virtual bool IsTerminated(Memory const& memory) noexcept;
+
+#define HANDLER_INIT(ClassName) void ClassName::Initialize(RegisterMap& regMap)
+
 #endif
