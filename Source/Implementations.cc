@@ -1,6 +1,7 @@
 // Copyright (c) 2021 Chanjung Kim. All rights reserved.
 // Licensed under the MIT License.
 
+#include <pip-mips-emu/Formats.hh>
 #include <pip-mips-emu/Implementations.hh>
 
 namespace
@@ -37,7 +38,7 @@ HANDLER_INIT(DefaultHandler)
 
 HANDLER_IS_TERMINATED(DefaultHandler)
 {
-    return memory.GetRegister(WB_PC)
+    return memory.GetRegister(WB_PC) + 4
            >= static_cast<uint32_t>(Address::MakeText(memory.GetTextSize()));
 }
 
@@ -58,7 +59,10 @@ HANDLER_DUMP_PCS(DefaultHandler)
             stream << '|';
 
         first = false;
-        stream << std::hex << memory.GetRegister(reg);
+
+        uint32_t const content = memory.GetRegister(reg);
+        if (content)
+            stream << std::hex << content;
     }
     stream << "}\n";
 
@@ -104,6 +108,47 @@ HANDLER_DUMP_MEMORY(DefaultHandler)
 
 #pragma endregion
 
+// ------------------------------------ NextPCController  -------------------------------------- //
+
+#pragma region NextPCController
+
+CONTROLLER_INIT(NextPCController)
+{
+    REGISTER_READ(IF_ID_Instr);
+    REGISTER_READ(EX_MEM_Instr);
+    REGISTER_READ(EX_MEM_ALUResult);
+
+    MAKE_SIGNAL(nextPCType);
+}
+
+CONTROLLER_EXEC(NextPCController)
+{
+    DEFINE_CONTROLS();
+
+    uint32_t if_id_instr     = memory.GetRegister(IF_ID_Instr);
+    uint32_t if_id_operation = (if_id_instr >> 26) & 0b111111;
+    uint32_t if_id_function  = (if_id_instr >> 0) & 0b111111;
+    if (if_id_function == 0 && IsOneOf(if_id_function, JRFormatFn::JR))
+    {
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::JumpResult)));
+        RETURN_CONTROLS();
+    }
+
+    uint32_t ex_mem_instr     = memory.GetRegister(EX_MEM_Instr);
+    uint32_t ex_mem_aluResult = memory.GetRegister(EX_MEM_ALUResult);
+    uint32_t ex_mem_operation = (ex_mem_instr >> 26) & 0b111111;
+    if (ex_mem_aluResult && IsOneOf(ex_mem_operation, BIFormatOp::BEQ, BIFormatOp::BNE))
+    {
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::BranchResult)));
+        RETURN_CONTROLS();
+    }
+
+    ADD_CONTROL((Control::New(nextPCType, NextPCType::AdvancedPC)));
+    RETURN_CONTROLS();
+}
+
+#pragma endregion NextPCController
+
 // ------------------------------------ InstructionFetch  -------------------------------------- //
 
 #pragma region InstructionFetch
@@ -116,21 +161,29 @@ DATAPATH_INIT(InstructionFetch)
     REGISTER_WRITE(IF_ID_NextPC);
     REGISTER_WRITE(IF_ID_Instr);
 
-    SIGNAL(Branch);
+    SIGNAL(nextPCType);
 }
 
 DATAPATH_EXEC(InstructionFetch)
 {
     DEFINE_DELTAS();
 
-    uint32_t const pcValue     = memory.GetRegister(PC);
-    uint32_t const instruction = memory.GetWord(Address::MakeFromWord(pcValue));
-    uint32_t const newPcValue  = pcValue + 4;
+    uint32_t const pcValue = memory.GetRegister(PC);
+    if (pcValue >= memory.GetTextSize())
+    {
+        ADD_DELTA((Delta::Register(IF_ID_NextPC, 0)));
+        ADD_DELTA((Delta::Register(IF_ID_Instr, 0)));
+    }
+    else
+    {
+        uint32_t const instruction = memory.GetWord(Address::MakeFromWord(pcValue));
+        uint32_t const newPCValue  = pcValue + 4;
 
-    ADD_DELTA(Delta::Conditioned(PC, newPcValue, Branch, 0));
-    ADD_DELTA(Delta::Register(IF_ID_PC, pcValue));
-    ADD_DELTA(Delta::Register(IF_ID_NextPC, newPcValue));
-    ADD_DELTA(Delta::Register(IF_ID_Instr, instruction));
+        ADD_DELTA((Delta::Conditioned(PC, newPCValue, nextPCType, NextPCType::AdvancedPC)));
+        ADD_DELTA((Delta::Register(IF_ID_PC, pcValue)));
+        ADD_DELTA((Delta::Register(IF_ID_NextPC, newPCValue)));
+        ADD_DELTA((Delta::Register(IF_ID_Instr, instruction)));
+    }
 
     RETURN_DELTAS();
 }
@@ -151,9 +204,18 @@ DATAPATH_INIT(InstructionDecode)
 
     REGISTER_WRITE(ID_EX_PC);
     REGISTER_WRITE(ID_EX_NextPC);
+    REGISTER_WRITE(ID_EX_Instr);
+
+    REGISTER_WRITE(ID_EX_RegWrite);
+    REGISTER_WRITE(ID_EX_MemWrite);
+    REGISTER_WRITE(ID_EX_MemRead);
+
     REGISTER_WRITE(ID_EX_Reg1Value);
     REGISTER_WRITE(ID_EX_Reg2Value);
+
     REGISTER_WRITE(ID_EX_Imm);
+    REGISTER_WRITE(ID_EX_Reg2);
+    REGISTER_WRITE(ID_EX_Reg3);
 }
 
 DATAPATH_EXEC(InstructionDecode)
@@ -165,16 +227,56 @@ DATAPATH_EXEC(InstructionDecode)
     FORWARD_REGISTER(IF_ID_Instr, ID_EX_Instr);
 
     uint32_t const instruction = memory.GetRegister(IF_ID_Instr);
-    uint32_t const register1   = (instruction >> 21) & 0b11111;
-    uint32_t const register2   = (instruction >> 16) & 0b11111;
-    uint32_t const immediate   = (instruction >> 0) & 0xFFFF;
+
+    uint32_t regWrite = 0, memWrite = 0, memRead = 0;
+
+    uint32_t const operation = (instruction >> 26) & 0b111111;
+    if (operation == 0)
+    {
+        uint32_t const function = (instruction >> 0) & 0b111111;
+        if (!IsOneOf(function, JRFormatFn::JR))
+            regWrite = 1;
+    }
+    else if (IsOneOf(operation,
+                     IFormatOp::ADDIU,
+                     IFormatOp::ANDI,
+                     IFormatOp::ORI,
+                     IFormatOp::SLTIU,
+                     IIFormatOp::LUI,
+                     JFormatOp::JAL))
+    {
+        regWrite = 1;
+    }
+    else if (IsOneOf(operation, OIFormatOp::LB, OIFormatOp::LW))
+    {
+        regWrite = 1;
+        memRead  = 1;
+    }
+    else if (IsOneOf(operation, OIFormatOp::SB, OIFormatOp::SW))
+    {
+        memWrite = 1;
+    }
+
+    // branch calculation
+
+    uint32_t const register1 = (instruction >> 21) & 0b11111;
+    uint32_t const register2 = (instruction >> 16) & 0b11111;
+    uint32_t const register3 = (instruction >> 11) & 0b11111;
+    uint32_t const immediate = (instruction >> 0) & 0xFFFF;
 
     uint32_t const register1Value = memory.GetRegister(register1);
     uint32_t const register2Value = memory.GetRegister(register2);
 
-    ADD_DELTA(Delta::Register(ID_EX_Reg1Value, register1Value));
-    ADD_DELTA(Delta::Register(ID_EX_Reg2Value, register2Value));
-    ADD_DELTA(Delta::Register(ID_EX_Imm, SignExtend(immediate, 16)));
+    ADD_DELTA((Delta::Register(ID_EX_RegWrite, regWrite)));
+    ADD_DELTA((Delta::Register(ID_EX_MemWrite, memWrite)));
+    ADD_DELTA((Delta::Register(ID_EX_MemRead, memRead)));
+
+    ADD_DELTA((Delta::Register(ID_EX_Reg1Value, register1Value)));
+    ADD_DELTA((Delta::Register(ID_EX_Reg2Value, register2Value)));
+
+    ADD_DELTA((Delta::Register(ID_EX_Imm, immediate)));
+    ADD_DELTA((Delta::Register(ID_EX_Reg2, register2)));
+    ADD_DELTA((Delta::Register(ID_EX_Reg3, register3)));
 
     RETURN_DELTAS();
 }
@@ -189,16 +291,30 @@ DATAPATH_INIT(Execution)
 {
     REGISTER_READ(ID_EX_PC);
     REGISTER_READ(ID_EX_NextPC);
-    REGISTER_READ(ID_EX_Reg1Value);
-    REGISTER_READ(ID_EX_Reg2Value);
-    REGISTER_READ(ID_EX_Imm);
     REGISTER_READ(ID_EX_Instr);
 
+    REGISTER_READ(ID_EX_RegWrite);
+    REGISTER_READ(ID_EX_MemWrite);
+    REGISTER_READ(ID_EX_MemRead);
+
+    REGISTER_READ(ID_EX_Reg1Value);
+    REGISTER_READ(ID_EX_Reg2Value);
+
+    REGISTER_READ(ID_EX_Imm);
+    REGISTER_READ(ID_EX_Reg2);
+    REGISTER_READ(ID_EX_Reg3);
+
     REGISTER_WRITE(EX_MEM_PC);
-    REGISTER_WRITE(EX_MEM_BranchResult);
-    REGISTER_WRITE(EX_MEM_ALUResult);
-    REGISTER_WRITE(EX_MEM_Reg2Value);
     REGISTER_WRITE(EX_MEM_Instr);
+
+    REGISTER_WRITE(EX_MEM_RegWrite);
+    REGISTER_WRITE(EX_MEM_MemWrite);
+    REGISTER_WRITE(EX_MEM_MemRead);
+    REGISTER_WRITE(EX_MEM_Reg2Value);
+
+    // REGISTER_WRITE(EX_MEM_BranchResult);
+    REGISTER_WRITE(EX_MEM_ALUResult);
+    REGISTER_WRITE(EX_MEM_DestReg);
 }
 
 DATAPATH_EXEC(Execution)
@@ -206,14 +322,102 @@ DATAPATH_EXEC(Execution)
     DEFINE_DELTAS();
 
     FORWARD_REGISTER(ID_EX_PC, EX_MEM_PC);
-    FORWARD_REGISTER(ID_EX_Reg2Value, EX_MEM_Reg2Value);
     FORWARD_REGISTER(ID_EX_Instr, EX_MEM_Instr);
 
-    uint32_t const branchOffset = memory.GetRegister(ID_EX_Imm) << 2;
-    uint32_t const branchResult = memory.GetRegister(ID_EX_NextPC) + branchOffset;
-    ADD_DELTA(Delta::Register(EX_MEM_BranchResult, branchResult));
+    FORWARD_REGISTER(ID_EX_RegWrite, EX_MEM_RegWrite);
+    FORWARD_REGISTER(ID_EX_MemWrite, EX_MEM_MemWrite);
+    FORWARD_REGISTER(ID_EX_MemRead, EX_MEM_MemRead);
+    FORWARD_REGISTER(ID_EX_Reg2Value, EX_MEM_Reg2Value);
 
-    // TODO
+    /*uint32_t const branchOffset = memory.GetRegister(ID_EX_Imm) << 2;
+    uint32_t const branchResult = memory.GetRegister(ID_EX_NextPC) + branchOffset;
+    ADD_DELTA(Delta::Register(EX_MEM_BranchResult, branchResult));*/
+
+    uint32_t const instruction = memory.GetRegister(ID_EX_Instr);
+    uint32_t const operation   = (instruction >> 26) & 0b111111;
+    uint32_t const register2   = memory.GetRegister(ID_EX_Reg2);
+    uint32_t const register3   = memory.GetRegister(ID_EX_Reg3);
+
+    uint32_t destinationValue = 0;
+    uint32_t destination      = register2;
+    if (operation == 0)
+    {
+        // R format
+        uint32_t const function    = (instruction >> 0) & 0b111111;
+        uint32_t const shiftAmount = (instruction >> 6) & 0b11111;
+
+        uint32_t const source1Value = memory.GetRegister(ID_EX_Reg1Value);
+        uint32_t const source2Value = memory.GetRegister(ID_EX_Reg2Value);
+
+        if (IsOneOf(function, SRFormatFn::SLL, SRFormatFn::SRL))
+        {
+            switch (static_cast<SRFormatFn>(function))
+            {
+            case SRFormatFn::SLL: destinationValue = source2Value << shiftAmount; break;
+            case SRFormatFn::SRL: destinationValue = source2Value >> shiftAmount; break;
+            }
+        }
+        else
+        {
+            switch (static_cast<RFormatFn>(function))
+            {
+            case RFormatFn::ADDU: destinationValue = source1Value + source2Value; break;
+            case RFormatFn::SUBU: destinationValue = source1Value - source2Value; break;
+            case RFormatFn::AND: destinationValue = source1Value & source2Value; break;
+            case RFormatFn::NOR: destinationValue = ~(source1Value | source2Value); break;
+            case RFormatFn::OR: destinationValue = source1Value | source2Value; break;
+            case RFormatFn::SLTU: destinationValue = source1Value < source2Value; break;
+            }
+        }
+
+        destination = register3;
+    }
+    else if (IsOneOf(
+                 operation, IFormatOp::ADDIU, IFormatOp::ANDI, IFormatOp::ORI, IFormatOp::SLTIU))
+    {
+        uint32_t const sourceValue = memory.GetRegister(ID_EX_Reg1Value);
+        uint32_t const immediate   = memory.GetRegister(ID_EX_Imm);
+
+        switch (static_cast<IFormatOp>(operation))
+        {
+        case IFormatOp::ADDIU:
+        {
+            destinationValue = sourceValue + SignExtend(immediate, 16);
+            break;
+        }
+        case IFormatOp::ANDI:
+        {
+            destinationValue = sourceValue & immediate;
+            break;
+        }
+        case IFormatOp::ORI:
+        {
+            destinationValue = sourceValue | immediate;
+            break;
+        }
+        case IFormatOp::SLTIU:
+        {
+            destinationValue
+                = static_cast<uint32_t>(static_cast<int32_t>(sourceValue)
+                                        < static_cast<int32_t>(SignExtend(immediate, 16)));
+            break;
+        }
+        }
+    }
+    else if (IsOneOf(operation, IIFormatOp::LUI))
+    {
+        uint32_t const immediate = memory.GetRegister(ID_EX_Imm);
+        destinationValue         = (immediate << 16);
+    }
+    else if (IsOneOf(operation, OIFormatOp::LB, OIFormatOp::LW, OIFormatOp::SB, OIFormatOp::SW))
+    {
+        uint32_t const sourceValue = memory.GetRegister(ID_EX_Reg1Value);
+        uint32_t const immediate   = memory.GetRegister(ID_EX_Imm);
+
+        destinationValue = sourceValue + SignExtend(immediate, 16);
+    }
+    ADD_DELTA((Delta::Register(EX_MEM_ALUResult, destinationValue)));
+    ADD_DELTA((Delta::Register(EX_MEM_ALUResult, destination)));
 
     RETURN_DELTAS();
 }
@@ -226,15 +430,30 @@ DATAPATH_EXEC(Execution)
 
 DATAPATH_INIT(MemoryAccess)
 {
+    // Registers to read
     REGISTER_READ(EX_MEM_PC);
-    REGISTER_READ(EX_MEM_BranchResult);
-    REGISTER_READ(EX_MEM_ALUResult);
-    REGISTER_READ(EX_MEM_Reg2Value);
     REGISTER_READ(EX_MEM_Instr);
 
-    REGISTER_WRITE(MEM_WB_ReadData);
-    REGISTER_WRITE(MEM_WB_ALUResult);
+    REGISTER_READ(EX_MEM_RegWrite);
+    REGISTER_READ(EX_MEM_MemWrite);
+    REGISTER_READ(EX_MEM_MemRead);
+    REGISTER_READ(EX_MEM_Reg2Value);
+
+    // REGISTER_READ(EX_MEM_BranchResult);
+    REGISTER_READ(EX_MEM_ALUResult);
+    REGISTER_READ(EX_MEM_DestReg);
+
+    // Registers to forward
+    REGISTER_WRITE(MEM_WB_PC);
     REGISTER_WRITE(MEM_WB_Instr);
+
+    REGISTER_WRITE(MEM_WB_RegWrite);
+
+    REGISTER_WRITE(MEM_WB_ALUResult);
+    REGISTER_WRITE(MEM_WB_DestReg);
+
+    // Registers to write
+    REGISTER_WRITE(MEM_WB_ReadData);
 }
 
 DATAPATH_EXEC(MemoryAccess)
@@ -242,21 +461,37 @@ DATAPATH_EXEC(MemoryAccess)
     DEFINE_DELTAS();
 
     FORWARD_REGISTER(EX_MEM_PC, MEM_WB_PC);
-    FORWARD_REGISTER(EX_MEM_ALUResult, MEM_WB_ALUResult);
     FORWARD_REGISTER(EX_MEM_Instr, MEM_WB_Instr);
 
-    uint32_t const address = memory.GetRegister(EX_MEM_ALUResult);
-    // TODO: LB and LW
-    uint32_t const content = memory.GetWord(Address::MakeFromWord(address));
-    ADD_DELTA(Delta::Register(MEM_WB_ReadData, content));
+    FORWARD_REGISTER(EX_MEM_RegWrite, MEM_WB_RegWrite);
+    FORWARD_REGISTER(EX_MEM_MemRead, MEM_WB_MemRead);
 
-    // TODO: SB and SW
-    uint32_t const writeData = memory.GetRegister(EX_MEM_Reg2Value);
-    ADD_DELTA(Delta::MemoryWord(Address::MakeFromWord(address), writeData));
+    FORWARD_REGISTER(EX_MEM_ALUResult, MEM_WB_ALUResult);
+    FORWARD_REGISTER(EX_MEM_DestReg, MEM_WB_DestReg);
 
-    // TODO: Conditioned
-    uint32_t const branchResult = memory.GetRegister(EX_MEM_BranchResult);
-    ADD_DELTA(Delta::Register(PC, branchResult));
+    uint32_t       readData    = 0;
+    uint32_t const writeData   = memory.GetRegister(EX_MEM_Reg2Value);
+    uint32_t const instruction = memory.GetRegister(EX_MEM_Instr);
+    uint32_t const memoryRead  = memory.GetRegister(EX_MEM_MemRead);
+    uint32_t const memoryWrite = memory.GetRegister(EX_MEM_MemWrite);
+    uint32_t const operation   = (instruction >> 26) & 0b111111;
+
+    Address const address = Address::MakeFromWord(memory.GetRegister(EX_MEM_ALUResult));
+    if (memoryRead)
+    {
+        if ((operation & 0b11) == 0b11)
+            readData = memory.GetWord(address);
+        else
+            readData = SignExtend(memory.GetByte(address), 8);
+    }
+    if (memoryWrite)
+    {
+        if ((operation & 0b11) == 0b11)
+            ADD_DELTA(Delta::MemoryWord(address, writeData));
+        else
+            ADD_DELTA(Delta::MemoryByte(address, static_cast<uint8_t>(writeData & 0xFF)));
+    }
+    ADD_DELTA(Delta::Register(MEM_WB_ReadData, readData));
 
     RETURN_DELTAS();
 }
@@ -269,9 +504,18 @@ DATAPATH_EXEC(MemoryAccess)
 
 DATAPATH_INIT(WriteBack)
 {
-    REGISTER_READ(MEM_WB_ReadData);
-    REGISTER_READ(MEM_WB_ALUResult);
+    REGISTER_READ(MEM_WB_PC);
     REGISTER_READ(MEM_WB_Instr);
+
+    REGISTER_READ(MEM_WB_RegWrite);
+    REGISTER_READ(MEM_WB_MemRead);
+
+    REGISTER_READ(MEM_WB_ALUResult);
+    REGISTER_READ(MEM_WB_DestReg);
+
+    REGISTER_READ(MEM_WB_ReadData);
+
+    REGISTER_WRITE(WB_PC);
 }
 
 DATAPATH_EXEC(WriteBack)
@@ -280,9 +524,22 @@ DATAPATH_EXEC(WriteBack)
 
     FORWARD_REGISTER(MEM_WB_PC, WB_PC);
 
-    // TODO
-    ADD_DELTA(Delta::Register(0, MEM_WB_ReadData));
-    ADD_DELTA(Delta::Register(0, MEM_WB_ALUResult));
+    uint32_t const instruction = memory.GetRegister(MEM_WB_Instr);
+    uint32_t const regWrite    = memory.GetRegister(MEM_WB_RegWrite);
+    uint32_t const memoryRead  = memory.GetRegister(MEM_WB_MemRead);
+    uint32_t const aluResult   = memory.GetRegister(MEM_WB_ALUResult);
+    uint32_t const destination = memory.GetRegister(MEM_WB_DestReg);
+    uint32_t const readData    = memory.GetRegister(MEM_WB_ReadData);
+
+    if (regWrite)
+    {
+        uint32_t destinationValue = 0;
+        if (memoryRead)
+            destinationValue = readData;
+        else
+            destinationValue = aluResult;
+        ADD_DELTA((Delta::Register(destination, destinationValue)));
+    }
 
     RETURN_DELTAS();
 }
