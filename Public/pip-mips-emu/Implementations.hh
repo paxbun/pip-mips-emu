@@ -34,9 +34,10 @@ enum class NextPCType : uint16_t
 
 enum class PipelineState : uint16_t
 {
-    Normal  = 0,
-    Stalled = 1,
-    Flushed = 2,
+    Normal   = 0,
+    Stalled  = 1,
+    Flushed  = 2,
+    Flushed3 = 3,
 };
 
 class NextPCController : public Controller
@@ -46,8 +47,6 @@ class NextPCController : public Controller
   private:
     // Registers to read
     uint32_t IF_ID_Instr;
-    uint32_t EX_MEM_Instr;
-    uint32_t EX_MEM_ALUResult;
 
     uint32_t ID_EX_MemRead;
     uint32_t ID_EX_Reg2;
@@ -169,6 +168,9 @@ class Execution : public Datapath
     uint32_t MEM_WB_MemRead;
     uint32_t MEM_WB_DestReg;
     uint32_t MEM_WB_ReadData;
+
+    // Signals
+    uint32_t pipelineState;
 };
 
 class MemoryAccess : public Datapath

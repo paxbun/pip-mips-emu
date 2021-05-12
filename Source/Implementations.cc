@@ -127,8 +127,6 @@ HANDLER_DUMP_MEMORY(DefaultHandler)
 CONTROLLER_INIT(NextPCController)
 {
     REGISTER_READ(IF_ID_Instr);
-    REGISTER_READ(EX_MEM_Instr);
-    REGISTER_READ(EX_MEM_ALUResult);
 
     REGISTER_READ(ID_EX_MemRead);
     REGISTER_READ(ID_EX_Reg2);
@@ -152,16 +150,11 @@ CONTROLLER_EXEC(NextPCController)
         RETURN_CONTROLS();
     }
 
-    /*
-    uint32_t const ex_mem_instr     = memory.GetRegister(EX_MEM_Instr);
-    uint32_t const ex_mem_aluResult = memory.GetRegister(EX_MEM_ALUResult);
-    uint32_t const ex_mem_operation = (ex_mem_instr >> 26) & 0b111111;
-    if (ex_mem_aluResult && IsOneOf(ex_mem_operation, BIFormatOp::BEQ, BIFormatOp::BNE))
+    if (IsOneOf(if_id_operation, BIFormatOp::BEQ, BIFormatOp::BNE))
     {
-        ADD_CONTROL((Control::New(nextPCType, NextPCType::BranchResult)));
+        // TODO
         RETURN_CONTROLS();
     }
-    */
 
     uint32_t const id_ex_memRead = memory.GetRegister(ID_EX_MemRead);
     uint32_t const if_id_reg1    = (if_id_instr >> 26) & 0b11111;
@@ -227,6 +220,10 @@ DATAPATH_EXEC(InstructionFetch)
 
         ADD_DELTA((Delta::Conditioned(IF_ID_Instr, instruction, 0, PipelineState::Flushed)));
 
+        // Do not mutate when stalled
+
+        ADD_DELTA((Delta::Conditioned(IF_ID_Instr, instruction, 0, PipelineState::Flushed3)));
+
         RETURN_DELTAS();
     }
 }
@@ -279,6 +276,9 @@ DATAPATH_EXEC(InstructionDecode)
     uint32_t const instruction = memory.GetRegister(IF_ID_Instr);
     ADD_DELTA((Delta::Conditioned(ID_EX_Instr, instruction, pipelineState, PipelineState::Normal)));
     ADD_DELTA((Delta::Conditioned(ID_EX_Instr, 0, pipelineState, PipelineState::Stalled)));
+    ADD_DELTA(
+        (Delta::Conditioned(ID_EX_Instr, instruction, pipelineState, PipelineState::Flushed)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_Instr, 0, pipelineState, PipelineState::Flushed3)));
 
     uint32_t const register1 = (instruction >> 21) & 0b11111;
     uint32_t const register2 = (instruction >> 16) & 0b11111;
@@ -339,6 +339,16 @@ DATAPATH_EXEC(InstructionDecode)
     ADD_DELTA((Delta::Conditioned(ID_EX_RegWrite, 0, pipelineState, PipelineState::Stalled)));
     ADD_DELTA((Delta::Conditioned(ID_EX_MemWrite, 0, pipelineState, PipelineState::Stalled)));
     ADD_DELTA((Delta::Conditioned(ID_EX_MemRead, 0, pipelineState, PipelineState::Stalled)));
+
+    ADD_DELTA(
+        (Delta::Conditioned(ID_EX_RegWrite, regWrite, pipelineState, PipelineState::Flushed)));
+    ADD_DELTA(
+        (Delta::Conditioned(ID_EX_MemWrite, memWrite, pipelineState, PipelineState::Flushed)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_MemRead, memRead, pipelineState, PipelineState::Flushed)));
+
+    ADD_DELTA((Delta::Conditioned(ID_EX_RegWrite, 0, pipelineState, PipelineState::Flushed3)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_MemWrite, 0, pipelineState, PipelineState::Flushed3)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_MemRead, 0, pipelineState, PipelineState::Flushed3)));
 
     ADD_DELTA((Delta::Register(ID_EX_Reg1Value, register1Value)));
     ADD_DELTA((Delta::Register(ID_EX_Reg2Value, register2Value)));
@@ -401,6 +411,8 @@ DATAPATH_INIT(Execution)
     REGISTER_READ(MEM_WB_MemRead);
     REGISTER_READ(MEM_WB_DestReg);
     REGISTER_READ(MEM_WB_ReadData);
+
+    SIGNAL(pipelineState);
 }
 
 DATAPATH_EXEC(Execution)
@@ -408,11 +420,41 @@ DATAPATH_EXEC(Execution)
     DEFINE_DELTAS();
 
     FORWARD_REGISTER(ID_EX_PC, EX_MEM_PC);
-    FORWARD_REGISTER(ID_EX_Instr, EX_MEM_Instr);
 
-    FORWARD_REGISTER(ID_EX_RegWrite, EX_MEM_RegWrite);
-    FORWARD_REGISTER(ID_EX_MemWrite, EX_MEM_MemWrite);
-    FORWARD_REGISTER(ID_EX_MemRead, EX_MEM_MemRead);
+    uint32_t const instruction = memory.GetRegister(ID_EX_Instr);
+    uint32_t const regWrite    = memory.GetRegister(ID_EX_RegWrite);
+    uint32_t const memWrite    = memory.GetRegister(ID_EX_MemWrite);
+    uint32_t const memRead     = memory.GetRegister(ID_EX_MemRead);
+
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_Instr, instruction, pipelineState, PipelineState::Normal)));
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_RegWrite, regWrite, pipelineState, PipelineState::Normal)));
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_MemWrite, memWrite, pipelineState, PipelineState::Normal)));
+    ADD_DELTA((Delta::Conditioned(EX_MEM_MemRead, memRead, pipelineState, PipelineState::Normal)));
+
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_Instr, instruction, pipelineState, PipelineState::Stalled)));
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_RegWrite, regWrite, pipelineState, PipelineState::Stalled)));
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_MemWrite, memWrite, pipelineState, PipelineState::Stalled)));
+    ADD_DELTA((Delta::Conditioned(EX_MEM_MemRead, memRead, pipelineState, PipelineState::Stalled)));
+
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_Instr, instruction, pipelineState, PipelineState::Flushed)));
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_RegWrite, regWrite, pipelineState, PipelineState::Flushed)));
+    ADD_DELTA(
+        (Delta::Conditioned(EX_MEM_MemWrite, memWrite, pipelineState, PipelineState::Flushed)));
+    ADD_DELTA((Delta::Conditioned(EX_MEM_MemRead, memRead, pipelineState, PipelineState::Flushed)));
+
+    ADD_DELTA((Delta::Conditioned(EX_MEM_Instr, 0, pipelineState, PipelineState::Flushed3)));
+    ADD_DELTA((Delta::Conditioned(EX_MEM_RegWrite, 0, pipelineState, PipelineState::Flushed3)));
+    ADD_DELTA((Delta::Conditioned(EX_MEM_MemWrite, 0, pipelineState, PipelineState::Flushed3)));
+    ADD_DELTA((Delta::Conditioned(EX_MEM_MemRead, 0, pipelineState, PipelineState::Flushed3)));
+
     FORWARD_REGISTER(ID_EX_Reg2Value, EX_MEM_Reg2Value);
 
     FORWARD_REGISTER(ID_EX_Reg2, EX_MEM_Reg2);
@@ -420,11 +462,10 @@ DATAPATH_EXEC(Execution)
     FORWARD_REGISTER(ID_EX_RAWrite, EX_MEM_RAWrite);
     FORWARD_REGISTER(ID_EX_RAValue, EX_MEM_RAValue);
 
-    uint32_t const instruction = memory.GetRegister(ID_EX_Instr);
-    uint32_t const operation   = (instruction >> 26) & 0b111111;
-    uint32_t const register1   = memory.GetRegister(ID_EX_Reg1);
-    uint32_t const register2   = memory.GetRegister(ID_EX_Reg2);
-    uint32_t const register3   = memory.GetRegister(ID_EX_Reg3);
+    uint32_t const operation = (instruction >> 26) & 0b111111;
+    uint32_t const register1 = memory.GetRegister(ID_EX_Reg1);
+    uint32_t const register2 = memory.GetRegister(ID_EX_Reg2);
+    uint32_t const register3 = memory.GetRegister(ID_EX_Reg3);
 
     uint32_t const immediate = memory.GetRegister(ID_EX_Imm);
 
@@ -519,6 +560,10 @@ DATAPATH_EXEC(Execution)
         }
         }
     }
+    else if (IsOneOf(operation, BIFormatOp::BEQ, BIFormatOp::BNE))
+    {
+        destinationValue = ((source1Value == source2Value) == IsOneOf(operation, BIFormatOp::BEQ));
+    }
     else if (IsOneOf(operation, IIFormatOp::LUI))
     {
         destinationValue = (immediate << 16);
@@ -604,6 +649,8 @@ DATAPATH_EXEC(MemoryAccess)
         if (mem_wb_destReg == EX_MEM_Reg2)
             writeData = memory.GetRegister(MEM_WB_ReadData);
     }
+
+    // TODO
 
     Address const address = Address::MakeFromWord(memory.GetRegister(EX_MEM_ALUResult));
     if (memoryRead)
