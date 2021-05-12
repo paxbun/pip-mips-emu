@@ -111,7 +111,13 @@ class InstructionDecode : public Datapath
     uint32_t ID_EX_Reg2;
     uint32_t ID_EX_Reg3;
 
+    uint32_t ID_EX_RAWrite;
+    uint32_t ID_EX_RAValue;
+
+    uint32_t PC;
+
     // Signals
+    uint32_t nextPCType;
     uint32_t pipelineState;
 };
 
@@ -137,6 +143,9 @@ class Execution : public Datapath
     uint32_t ID_EX_Reg2;
     uint32_t ID_EX_Reg3;
 
+    uint32_t ID_EX_RAWrite;
+    uint32_t ID_EX_RAValue;
+
     // Registers to forward
     uint32_t EX_MEM_PC;
     uint32_t EX_MEM_Instr;
@@ -147,6 +156,9 @@ class Execution : public Datapath
     uint32_t EX_MEM_Reg2Value;
 
     uint32_t EX_MEM_Reg2;
+
+    uint32_t EX_MEM_RAWrite;
+    uint32_t EX_MEM_RAValue;
 
     // Registers to write
     uint32_t EX_MEM_ALUResult;
@@ -175,9 +187,11 @@ class MemoryAccess : public Datapath
 
     uint32_t EX_MEM_Reg2;
 
-    // uint32_t EX_MEM_BranchResult;
     uint32_t EX_MEM_ALUResult;
     uint32_t EX_MEM_DestReg;
+
+    uint32_t EX_MEM_RAWrite;
+    uint32_t EX_MEM_RAValue;
 
     // Registers to forward
     uint32_t MEM_WB_PC;
@@ -188,6 +202,9 @@ class MemoryAccess : public Datapath
 
     uint32_t MEM_WB_ALUResult;
     uint32_t MEM_WB_DestReg;
+
+    uint32_t MEM_WB_RAWrite;
+    uint32_t MEM_WB_RAValue;
 
     // Registers to write
     uint32_t MEM_WB_ReadData;
@@ -210,9 +227,15 @@ class WriteBack : public Datapath
 
     uint32_t MEM_WB_ReadData;
 
+    uint32_t MEM_WB_RAWrite;
+    uint32_t MEM_WB_RAValue;
+
     // Registers to forward
     uint32_t WB_PC;
     uint32_t WB_Instr;
+
+    // Registers to write
+    uint32_t RA;
 };
 
 #endif
