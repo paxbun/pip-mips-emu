@@ -272,7 +272,7 @@ using HandlerPtr = std::unique_ptr<Handler>;
 
 #define HANDLER_INIT(ClassName) void ClassName::Initialize(RegisterMap& regMap)
 
-#define HANDLER_IS_TERMINATED(ClassName) bool ClassName::IsTerminated(Memory const& memory)
+#define HANDLER_IS_TERMINATED(ClassName) bool ClassName::IsTerminated(Memory const& memory) noexcept
 
 #define HANDLER_DUMP_PCS(ClassName)                                                                \
     void ClassName::DumpPCs(Memory const& memory, std::ostream& stream)
