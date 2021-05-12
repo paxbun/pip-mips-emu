@@ -42,13 +42,35 @@ enum class PipelineState : uint16_t
     Flushed3 = 3,
 };
 
-class PipelineStateController : public Controller
+class ATPPipelineStateController : public Controller
 {
     CONTROLLER_DECLARE_FUNCTIONS();
 
   private:
     // Registers to read
     uint32_t IF_ID_Instr;
+
+    uint32_t EX_MEM_ALUResult;
+    uint32_t EX_MEM_Instr;
+
+    uint32_t ID_EX_MemRead;
+    uint32_t ID_EX_Reg2;
+
+    // Signals
+    uint32_t nextPCType;
+    uint32_t pipelineState;
+};
+
+class ANTPPipelineStateController : public Controller
+{
+    CONTROLLER_DECLARE_FUNCTIONS();
+
+  private:
+    // Registers to read
+    uint32_t IF_ID_Instr;
+
+    uint32_t EX_MEM_ALUResult;
+    uint32_t EX_MEM_Instr;
 
     uint32_t ID_EX_MemRead;
     uint32_t ID_EX_Reg2;

@@ -120,13 +120,16 @@ HANDLER_DUMP_MEMORY(DefaultHandler)
 
 #pragma endregion
 
-// --------------------------------- PipelineStateController ----------------------------------- //
+// ------------------------------- ATPPipelineStateController  --------------------------------- //
 
-#pragma region PipelineStateController
+#pragma region ATPPipelineStateController
 
-CONTROLLER_INIT(PipelineStateController)
+CONTROLLER_INIT(ATPPipelineStateController)
 {
     REGISTER_READ(IF_ID_Instr);
+
+    REGISTER_READ(EX_MEM_ALUResult);
+    REGISTER_READ(EX_MEM_Instr);
 
     REGISTER_READ(ID_EX_MemRead);
     REGISTER_READ(ID_EX_Reg2);
@@ -135,11 +138,33 @@ CONTROLLER_INIT(PipelineStateController)
     MAKE_SIGNAL(pipelineState);
 }
 
-CONTROLLER_EXEC(PipelineStateController)
+CONTROLLER_EXEC(ATPPipelineStateController)
 {
     DEFINE_CONTROLS();
 
-    uint32_t const if_id_instr     = memory.GetRegister(IF_ID_Instr);
+    uint32_t const ex_mem_aluResult = memory.GetRegister(EX_MEM_ALUResult);
+    uint32_t const ex_mem_instr     = memory.GetRegister(EX_MEM_Instr);
+    uint32_t const ex_mem_operation = (ex_mem_instr >> 26) & 0b111111;
+    if (IsOneOf(ex_mem_operation, BIFormatOp::BEQ, BIFormatOp::BNE) && !ex_mem_aluResult)
+    {
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::BranchResultMemRestore)));
+        ADD_CONTROL((Control::New(pipelineState, PipelineState::Flushed3)));
+        RETURN_CONTROLS();
+    }
+
+    uint32_t const id_ex_memRead = memory.GetRegister(ID_EX_MemRead);
+    uint32_t const if_id_instr   = memory.GetRegister(IF_ID_Instr);
+    uint32_t const if_id_reg1    = (if_id_instr >> 26) & 0b11111;
+    uint32_t const if_id_reg2    = (if_id_instr >> 21) & 0b11111;
+    uint32_t const id_ex_reg2    = memory.GetRegister(ID_EX_Reg2);
+    if (id_ex_memRead && (if_id_reg1 == id_ex_reg2 || if_id_reg2 == id_ex_reg2))
+    {
+        // load-use stall
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::NotMutated)));
+        ADD_CONTROL((Control::New(pipelineState, PipelineState::Stalled)));
+        RETURN_CONTROLS();
+    }
+
     uint32_t const if_id_operation = (if_id_instr >> 26) & 0b111111;
     uint32_t const if_id_function  = (if_id_instr >> 0) & 0b111111;
     if ((if_id_operation == 0 && IsOneOf(if_id_function, JRFormatFn::JR))
@@ -152,11 +177,52 @@ CONTROLLER_EXEC(PipelineStateController)
 
     if (IsOneOf(if_id_operation, BIFormatOp::BEQ, BIFormatOp::BNE))
     {
-        // TODO
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::BranchResultID)));
+        ADD_CONTROL((Control::New(pipelineState, PipelineState::Flushed)));
+        RETURN_CONTROLS();
+    }
+
+    ADD_CONTROL((Control::New(nextPCType, NextPCType::AdvancedPC)));
+    ADD_CONTROL((Control::New(pipelineState, PipelineState::Normal)));
+    RETURN_CONTROLS();
+}
+
+#pragma endregion ATPPipelineStateController
+
+// ------------------------------- ANTPPipelineStateController --------------------------------- //
+
+#pragma region ANTPPipelineStateController
+
+CONTROLLER_INIT(ANTPPipelineStateController)
+{
+    REGISTER_READ(IF_ID_Instr);
+
+    REGISTER_READ(EX_MEM_ALUResult);
+    REGISTER_READ(EX_MEM_Instr);
+
+    REGISTER_READ(ID_EX_MemRead);
+    REGISTER_READ(ID_EX_Reg2);
+
+    MAKE_SIGNAL(nextPCType);
+    MAKE_SIGNAL(pipelineState);
+}
+
+CONTROLLER_EXEC(ANTPPipelineStateController)
+{
+    DEFINE_CONTROLS();
+
+    uint32_t const ex_mem_aluResult = memory.GetRegister(EX_MEM_ALUResult);
+    uint32_t const ex_mem_instr     = memory.GetRegister(EX_MEM_Instr);
+    uint32_t const ex_mem_operation = (ex_mem_instr >> 26) & 0b111111;
+    if (IsOneOf(ex_mem_operation, BIFormatOp::BEQ, BIFormatOp::BNE) && ex_mem_aluResult)
+    {
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::BranchResultMemJump)));
+        ADD_CONTROL((Control::New(pipelineState, PipelineState::Flushed3)));
         RETURN_CONTROLS();
     }
 
     uint32_t const id_ex_memRead = memory.GetRegister(ID_EX_MemRead);
+    uint32_t const if_id_instr   = memory.GetRegister(IF_ID_Instr);
     uint32_t const if_id_reg1    = (if_id_instr >> 26) & 0b11111;
     uint32_t const if_id_reg2    = (if_id_instr >> 21) & 0b11111;
     uint32_t const id_ex_reg2    = memory.GetRegister(ID_EX_Reg2);
@@ -165,17 +231,25 @@ CONTROLLER_EXEC(PipelineStateController)
         // load-use stall
         ADD_CONTROL((Control::New(nextPCType, NextPCType::NotMutated)));
         ADD_CONTROL((Control::New(pipelineState, PipelineState::Stalled)));
-    }
-    else
-    {
-        ADD_CONTROL((Control::New(nextPCType, NextPCType::AdvancedPC)));
-        ADD_CONTROL((Control::New(pipelineState, PipelineState::Normal)));
+        RETURN_CONTROLS();
     }
 
+    uint32_t const if_id_operation = (if_id_instr >> 26) & 0b111111;
+    uint32_t const if_id_function  = (if_id_instr >> 0) & 0b111111;
+    if ((if_id_operation == 0 && IsOneOf(if_id_function, JRFormatFn::JR))
+        || IsOneOf(if_id_operation, JFormatOp::J, JFormatOp::JAL))
+    {
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::JumpResult)));
+        ADD_CONTROL((Control::New(pipelineState, PipelineState::Flushed)));
+        RETURN_CONTROLS();
+    }
+
+    ADD_CONTROL((Control::New(nextPCType, NextPCType::AdvancedPC)));
+    ADD_CONTROL((Control::New(pipelineState, PipelineState::Normal)));
     RETURN_CONTROLS();
 }
 
-#pragma endregion PipelineStateController
+#pragma endregion ANTPPipelineStateController
 
 // ------------------------------------ InstructionFetch  -------------------------------------- //
 
