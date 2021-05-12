@@ -122,6 +122,8 @@ using DatapathPtr = std::unique_ptr<Datapath>;
 #define DATAPATH_INIT()                                                                            \
     virtual void Initialize(RegisterMap& regMap, SignalMap& sigMap, TickTockType& tickTock) override
 
+#define DATAPATH_EXEC() virtual std::vector<Delta> Execute(Memory const& memory) const override
+
 #define REGISTER_USAGE(registerName, registerUsage)                                                \
     regMap.AddEntry(#registerName, &registerName, registerUsage)
 
@@ -170,6 +172,8 @@ class Controller
 using ControllerPtr = std::unique_ptr<Controller>;
 
 #define CONTROLLER_INIT() virtual void Initialize(RegisterMap& regMap, SignalMap& sigMap) override
+
+#define CONTROLLER_EXEC() virtual std::vector<Control> Execute(Memory const& memory) const override
 
 #define MAKE_SIGNAL(signalName) sigMap.AddEntry(#signalName, &signalName, NamedEntryUsage::Write)
 
