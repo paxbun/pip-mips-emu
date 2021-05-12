@@ -88,6 +88,7 @@ class InstructionDecode : public Datapath
     uint32_t ID_EX_Reg2Value;
 
     uint32_t ID_EX_Imm;
+    uint32_t ID_EX_Reg1;
     uint32_t ID_EX_Reg2;
     uint32_t ID_EX_Reg3;
 };
@@ -110,6 +111,7 @@ class Execution : public Datapath
     uint32_t ID_EX_Reg2Value;
 
     uint32_t ID_EX_Imm;
+    uint32_t ID_EX_Reg1;
     uint32_t ID_EX_Reg2;
     uint32_t ID_EX_Reg3;
 
@@ -123,9 +125,14 @@ class Execution : public Datapath
     uint32_t EX_MEM_Reg2Value;
 
     // Registers to write
-    // uint32_t EX_MEM_BranchResult;
     uint32_t EX_MEM_ALUResult;
     uint32_t EX_MEM_DestReg;
+
+    // Registers for forwarding
+    uint32_t MEM_WB_RegWrite;
+    uint32_t MEM_WB_MemRead;
+    uint32_t MEM_WB_DestReg;
+    uint32_t MEM_WB_ReadData;
 };
 
 class MemoryAccess : public Datapath
