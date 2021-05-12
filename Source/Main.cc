@@ -161,19 +161,17 @@ int main(int argc, char* argv[])
         Options         options = ParseCommandArgs(argc, argv);
         EmulatorBuilder builder;
 
+        builder.AddDatapath<InstructionFetch>()
+            .AddDatapath<InstructionDecode>()
+            .AddDatapath<Execution>()
+            .AddDatapath<MemoryAccess>()
+            .AddDatapath<WriteBack>()
+            .AddHandler<DefaultHandler>();
+
         if (options.predictionType == BranchPredictionType::AlwaysTaken)
-        {
-            builder.AddDatapath<InstructionFetch>()
-                .AddDatapath<InstructionDecode>()
-                .AddDatapath<Execution>()
-                .AddDatapath<MemoryAccess>()
-                .AddDatapath<WriteBack>()
-                .AddHandler<DefaultHandler>();
-        }
+            builder.AddController<ATPPipelineStateController>();
         else if (options.predictionType == BranchPredictionType::AlwaysNotTaken)
-        {
-            //
-        }
+            builder.AddController<ANTPPipelineStateController>();
 
         auto [text, data]       = LoadMemory(options);
         auto [emulator, memory] = builder.Build(std::move(text), std::move(data));
@@ -181,10 +179,10 @@ int main(int argc, char* argv[])
 
         TickTockResult result = TickTockResult::Success;
 
-        uint32_t i;
-        for (i = 1; i <= options.numInstructions && emulator.IsTerminated(memory); ++i)
+        uint32_t i, j = 0;
+        for (i = 1; j < options.numInstructions && emulator.IsTerminated(memory); ++i)
         {
-            result = emulator.TickTock(memory);
+            result = emulator.TickTock(memory, j);
             if (result != TickTockResult::Success)
                 break;
 
@@ -193,6 +191,7 @@ int main(int argc, char* argv[])
             if (options.dumpPcEachTickTock)
             {
                 handler->DumpPCs(memory, std::cout);
+                std::cout << '\n';
             }
 
             if (options.dumpEachTickTock)
