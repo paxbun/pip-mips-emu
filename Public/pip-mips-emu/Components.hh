@@ -189,9 +189,16 @@ class Controller
 
 using ControllerPtr = std::unique_ptr<Controller>;
 
-#define CONTROLLER_INIT() virtual void Initialize(RegisterMap& regMap, SignalMap& sigMap) override
+#define CONTROLLER_DECLARE_FUNCTIONS()                                                             \
+  public:                                                                                          \
+    virtual void                 Initialize(RegisterMap& regMap, SignalMap& sigMap) override;      \
+    virtual std::vector<Control> Execute(Memory const& memory) override;
 
-#define CONTROLLER_EXEC() virtual std::vector<Control> Execute(Memory const& memory) const override
+#define CONTROLLER_INIT(ClassName)                                                                 \
+    void ClassName::Initialize(RegisterMap& regMap, SignalMap& sigMap)
+
+#define CONTROLLER_EXEC(ClassName)                                                                 \
+    std::vector<Control> ClassName::Execute(Memory const& memory) const
 
 #define MAKE_SIGNAL(signalName) sigMap.AddEntry(#signalName, &signalName, NamedEntryUsage::Write)
 
@@ -227,5 +234,7 @@ using HandlerPtr = std::unique_ptr<Handler>;
     virtual bool IsTerminated(Memory const& memory) noexcept;
 
 #define HANDLER_INIT(ClassName) void ClassName::Initialize(RegisterMap& regMap)
+
+#define HANDLER_IS_TERMINATED(ClassName) bool ClassName::IsTerminated(Memory const& memory)
 
 #endif
