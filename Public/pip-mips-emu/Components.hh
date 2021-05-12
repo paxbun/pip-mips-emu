@@ -256,7 +256,7 @@ using HandlerPtr = std::unique_ptr<Handler>;
 #define HANDLER_IS_TERMINATED(ClassName) bool ClassName::IsTerminated(Memory const& memory)
 
 #define HANDLER_DUMP_PCS(ClassName)                                                                \
-    void ClassName::DumpPCs(Memory const& memory, std::ostream& ostream)
+    void ClassName::DumpPCs(Memory const& memory, std::ostream& stream)
 
 #define HANDLER_DUMP_REGISTERS(ClassName)                                                          \
     void ClassName::DumpRegisters(Memory const& memory, std::ostream& stream)
