@@ -48,6 +48,11 @@ HANDLER_IS_TERMINATED(DefaultHandler)
            >= static_cast<uint32_t>(Address::MakeText(memory.GetTextSize()));
 }
 
+HANDLER_CALC_NUM_INSTRS(DefaultHandler)
+{
+    return WB_PC && WB_Instr;
+}
+
 HANDLER_DUMP_PCS(DefaultHandler)
 {
     std::ios_base::fmtflags flags = stream.flags();
@@ -215,7 +220,9 @@ DATAPATH_EXEC(InstructionFetch)
             (Delta::Conditioned(IF_ID_NextPC, newPCValue, pipelineState, PipelineState::Normal)));
         ADD_DELTA(
             (Delta::Conditioned(IF_ID_Instr, instruction, pipelineState, PipelineState::Normal)));
-        // ADD_DELTA((Delta::Conditioned(IF_ID_Instr, instruction, 0, PipelineState::Flushed)));
+
+        ADD_DELTA((Delta::Conditioned(IF_ID_Instr, instruction, 0, PipelineState::Flushed)));
+
         RETURN_DELTAS();
     }
 }

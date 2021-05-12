@@ -237,12 +237,17 @@ class Handler
     /// Implementers must create named registers in this function. The indices will be
     /// assigned automatically after <c>Handler::Initialize</c> is called.
     /// </summary>
-    virtual void Initialize(RegisterMap& regMap) = 0;
+    virtual void Initialize(RegisterMap& regMap, SignalMap& sigMap) = 0;
 
     /// <summary>
     /// Returns <c>true</c> if the program is terminated.
     /// </summary>
     virtual bool IsTerminated(Memory const& memory) noexcept = 0;
+
+    /// <summary>
+    /// Calculate the number of instructions processed in this cycle.
+    /// </summary>
+    virtual uint32_t CalcNumInstructions(std::vector<uint16_t> const& controls) noexcept = 0;
 
     /// <summary>
     /// Prints contents of PCs in each pipeline stage.
@@ -264,15 +269,19 @@ using HandlerPtr = std::unique_ptr<Handler>;
 
 #define HANDLER_DECLARE_FUNCTIONS()                                                                \
   public:                                                                                          \
-    virtual void Initialize(RegisterMap& regMap) override;                                         \
-    virtual bool IsTerminated(Memory const& memory) noexcept override;                             \
-    virtual void DumpPCs(Memory const& memory, std::ostream& ostream) override;                    \
-    virtual void DumpRegisters(Memory const& memory, std::ostream& stream) override;               \
-    virtual void DumpMemory(Memory const& memory, Range range, std::ostream& stream) override;
+    virtual void     Initialize(RegisterMap& regMap, SignalMap& sigMap) override;                  \
+    virtual bool     IsTerminated(Memory const& memory) noexcept override;                         \
+    virtual uint32_t CalcNumInstructions(std::vector<uint16_t> const& controls) noexcept;          \
+    virtual void     DumpPCs(Memory const& memory, std::ostream& ostream) override;                \
+    virtual void     DumpRegisters(Memory const& memory, std::ostream& stream) override;           \
+    virtual void     DumpMemory(Memory const& memory, Range range, std::ostream& stream) override;
 
-#define HANDLER_INIT(ClassName) void ClassName::Initialize(RegisterMap& regMap)
+#define HANDLER_INIT(ClassName) void ClassName::Initialize(RegisterMap& regMap, SignalMap& sigMap)
 
 #define HANDLER_IS_TERMINATED(ClassName) bool ClassName::IsTerminated(Memory const& memory) noexcept
+
+#define HANDLER_CALC_NUM_INSTRS(ClassName)                                                         \
+    uint32_t ClassName::CalcNumInstructions(std::vector<uint16_t> const& controls) noexcept
 
 #define HANDLER_DUMP_PCS(ClassName)                                                                \
     void ClassName::DumpPCs(Memory const& memory, std::ostream& stream)

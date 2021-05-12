@@ -72,7 +72,7 @@ class Emulator
     /// </summary>
     /// <param name="memory">The memory to mutate</param>
     /// <returns>Execution result</returns>
-    TickTockResult TickTock(Memory& memory) noexcept;
+    TickTockResult TickTock(Memory& memory, uint32_t& num_instr) noexcept;
 
     /// <summary>
     /// Returns <c>true</c> if the program is terminated.

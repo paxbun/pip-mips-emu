@@ -72,18 +72,20 @@ Emulator::Emulator(std::vector<std::pair<DatapathPtr, TickTockType>>&& datapaths
     _controls(namedSignals.size(), 0)
 {}
 
-TickTockResult Emulator::TickTock(Memory& memory) noexcept
+TickTockResult Emulator::TickTock(Memory& memory, uint32_t& num_instr) noexcept
 {
     if (IsTerminated(memory))
         return TickTockResult::AlreadyTerminated;
 
     try
     {
+        std::fill(_controls.begin(), _controls.end(), 0);
         for (auto const& controller : _controllers)
         {
             for (auto const& control : controller->Execute(memory))
                 _controls[control.signal] = control.value;
         }
+        num_instr += _handler->CalcNumInstructions(_controls);
 
         std::vector<std::vector<Delta>> tickDeltas;
         for (auto const& datapath : _datapaths) tickDeltas.push_back(datapath->Execute(memory));
