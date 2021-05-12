@@ -124,6 +124,8 @@ class Execution : public Datapath
     uint32_t EX_MEM_MemRead;
     uint32_t EX_MEM_Reg2Value;
 
+    uint32_t EX_MEM_Reg2;
+
     // Registers to write
     uint32_t EX_MEM_ALUResult;
     uint32_t EX_MEM_DestReg;
@@ -148,6 +150,8 @@ class MemoryAccess : public Datapath
     uint32_t EX_MEM_MemWrite;
     uint32_t EX_MEM_MemRead;
     uint32_t EX_MEM_Reg2Value;
+
+    uint32_t EX_MEM_Reg2;
 
     // uint32_t EX_MEM_BranchResult;
     uint32_t EX_MEM_ALUResult;

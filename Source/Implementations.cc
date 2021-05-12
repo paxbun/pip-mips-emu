@@ -314,6 +314,8 @@ DATAPATH_INIT(Execution)
     REGISTER_WRITE(EX_MEM_MemRead);
     REGISTER_WRITE(EX_MEM_Reg2Value);
 
+    REGISTER_WRITE(EX_MEM_Reg2);
+
     REGISTER_READ_WRITE(EX_MEM_ALUResult);
     REGISTER_READ_WRITE(EX_MEM_DestReg);
 
@@ -333,6 +335,9 @@ DATAPATH_EXEC(Execution)
     FORWARD_REGISTER(ID_EX_RegWrite, EX_MEM_RegWrite);
     FORWARD_REGISTER(ID_EX_MemWrite, EX_MEM_MemWrite);
     FORWARD_REGISTER(ID_EX_MemRead, EX_MEM_MemRead);
+    FORWARD_REGISTER(ID_EX_Reg2Value, EX_MEM_Reg2Value);
+
+    FORWARD_REGISTER(ID_EX_Reg2, EX_MEM_Reg2);
 
     uint32_t const instruction = memory.GetRegister(ID_EX_Instr);
     uint32_t const operation   = (instruction >> 26) & 0b111111;
@@ -466,7 +471,8 @@ DATAPATH_INIT(MemoryAccess)
     REGISTER_READ(EX_MEM_MemRead);
     REGISTER_READ(EX_MEM_Reg2Value);
 
-    // REGISTER_READ(EX_MEM_BranchResult);
+    REGISTER_READ(EX_MEM_Reg2);
+
     REGISTER_READ(EX_MEM_ALUResult);
     REGISTER_READ(EX_MEM_DestReg);
 
@@ -474,13 +480,14 @@ DATAPATH_INIT(MemoryAccess)
     REGISTER_WRITE(MEM_WB_PC);
     REGISTER_WRITE(MEM_WB_Instr);
 
-    REGISTER_WRITE(MEM_WB_RegWrite);
+    REGISTER_READ_WRITE(MEM_WB_RegWrite);
+    REGISTER_READ_WRITE(MEM_WB_MemRead);
 
     REGISTER_WRITE(MEM_WB_ALUResult);
-    REGISTER_WRITE(MEM_WB_DestReg);
+    REGISTER_READ_WRITE(MEM_WB_DestReg);
 
     // Registers to write
-    REGISTER_WRITE(MEM_WB_ReadData);
+    REGISTER_READ_WRITE(MEM_WB_ReadData);
 }
 
 DATAPATH_EXEC(MemoryAccess)
@@ -496,12 +503,19 @@ DATAPATH_EXEC(MemoryAccess)
     FORWARD_REGISTER(EX_MEM_ALUResult, MEM_WB_ALUResult);
     FORWARD_REGISTER(EX_MEM_DestReg, MEM_WB_DestReg);
 
-    uint32_t       readData    = 0;
-    uint32_t const writeData   = memory.GetRegister(EX_MEM_Reg2Value);
     uint32_t const instruction = memory.GetRegister(EX_MEM_Instr);
     uint32_t const memoryRead  = memory.GetRegister(EX_MEM_MemRead);
     uint32_t const memoryWrite = memory.GetRegister(EX_MEM_MemWrite);
     uint32_t const operation   = (instruction >> 26) & 0b111111;
+
+    uint32_t       readData       = 0;
+    uint32_t       writeData      = memory.GetRegister(EX_MEM_Reg2Value);
+    uint32_t const mem_wb_destReg = memory.GetRegister(MEM_WB_DestReg);
+    if (memory.GetRegister(MEM_WB_RegWrite) && memory.GetRegister(MEM_WB_MemRead) && mem_wb_destReg)
+    {
+        if (mem_wb_destReg == EX_MEM_Reg2)
+            writeData = memory.GetRegister(MEM_WB_ReadData);
+    }
 
     Address const address = Address::MakeFromWord(memory.GetRegister(EX_MEM_ALUResult));
     if (memoryRead)
