@@ -185,6 +185,9 @@ class Execution : public Datapath
     uint32_t MEM_WB_MemRead;
     uint32_t MEM_WB_DestReg;
     uint32_t MEM_WB_ReadData;
+    uint32_t MEM_WB_ALUResult;
+    uint32_t MEM_WB_RAWrite;
+    uint32_t MEM_WB_RAValue;
 
     // Signals
     uint32_t pipelineState;

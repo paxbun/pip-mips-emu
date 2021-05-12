@@ -67,9 +67,9 @@ Emulator::Emulator(std::vector<std::pair<DatapathPtr, TickTockType>>&& datapaths
     _datapaths(FilterDatapath(std::move(datapaths), TickTockType::NoPreference)),
     _controllers(std::move(controllers)),
     _handler { std::move(handler) },
-    // _namedRegisters { std::move(namedRegisters) },
-    // _namedSignals { std::move(namedSignals) },
-    _controls(namedSignals.size(), 0)
+    _namedRegisters { std::move(namedRegisters) },
+    _namedSignals { std::move(namedSignals) },
+    _controls(_namedSignals.size(), 0)
 {}
 
 TickTockResult Emulator::TickTock(Memory& memory, uint32_t& num_instr) noexcept
@@ -85,18 +85,19 @@ TickTockResult Emulator::TickTock(Memory& memory, uint32_t& num_instr) noexcept
             for (auto const& control : controller->Execute(memory))
                 _controls[control.signal] = control.value;
         }
-        num_instr += _handler->CalcNumInstructions(_controls);
 
         std::vector<std::vector<Delta>> tickDeltas;
-        for (auto const& datapath : _datapaths) tickDeltas.push_back(datapath->Execute(memory));
         for (auto const& datapath : _tickDatapaths) tickDeltas.push_back(datapath->Execute(memory));
 
         ApplyDeltas(memory, _controls, tickDeltas);
 
         std::vector<std::vector<Delta>> tockDeltas;
+        for (auto const& datapath : _datapaths) tockDeltas.push_back(datapath->Execute(memory));
         for (auto const& datapath : _tockDatapaths) tockDeltas.push_back(datapath->Execute(memory));
 
         ApplyDeltas(memory, _controls, tockDeltas);
+
+        num_instr += _handler->CalcNumInstructions(memory);
 
         return TickTockResult::Success;
     }
@@ -130,6 +131,7 @@ void EmulatorBuilder::AddController(ControllerPtr&& component)
 
 void EmulatorBuilder::AddHandler(HandlerPtr&& handler)
 {
+    handler->Initialize(_regMap, _sigMap);
     _handler = std::move(handler);
 }
 
@@ -142,15 +144,15 @@ std::pair<Emulator, Memory> EmulatorBuilder::Build(std::vector<uint8_t>&& text,
     auto registers = _regMap.Build();
     auto signals   = _sigMap.Build();
 
-    Emulator emulator {
-        std::move(_datapaths), std::move(_controllers), std::move(_handler),
-        std::move(registers),  std::move(signals),
-    };
-
     Memory memory {
         static_cast<uint32_t>(registers.size()),
         std::move(text),
         std::move(data),
+    };
+
+    Emulator emulator {
+        std::move(_datapaths), std::move(_controllers), std::move(_handler),
+        std::move(registers),  std::move(signals),
     };
 
     return std::make_pair(std::move(emulator), std::move(memory));

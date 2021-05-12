@@ -40,12 +40,12 @@ class Emulator
     friend class EmulatorBuilder;
 
   private:
-    std::vector<DatapathPtr>   _tickDatapaths, _tockDatapaths, _datapaths;
-    std::vector<ControllerPtr> _controllers;
-    HandlerPtr                 _handler;
-    // std::unordered_map<std::string, uint32_t> _namedRegisters;
-    // std::unordered_map<std::string, uint32_t> _namedSignals;
-    std::vector<uint16_t> _controls;
+    std::vector<DatapathPtr>                  _tickDatapaths, _tockDatapaths, _datapaths;
+    std::vector<ControllerPtr>                _controllers;
+    HandlerPtr                                _handler;
+    std::unordered_map<std::string, uint32_t> _namedRegisters;
+    std::unordered_map<std::string, uint32_t> _namedSignals;
+    std::vector<uint16_t>                     _controls;
 
   public:
     HandlerPtr const& GetHandler() const

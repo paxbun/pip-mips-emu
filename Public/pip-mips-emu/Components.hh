@@ -247,7 +247,7 @@ class Handler
     /// <summary>
     /// Calculate the number of instructions processed in this cycle.
     /// </summary>
-    virtual uint32_t CalcNumInstructions(std::vector<uint16_t> const& controls) noexcept = 0;
+    virtual uint32_t CalcNumInstructions(Memory const& memory) noexcept = 0;
 
     /// <summary>
     /// Prints contents of PCs in each pipeline stage.
@@ -271,7 +271,7 @@ using HandlerPtr = std::unique_ptr<Handler>;
   public:                                                                                          \
     virtual void     Initialize(RegisterMap& regMap, SignalMap& sigMap) override;                  \
     virtual bool     IsTerminated(Memory const& memory) noexcept override;                         \
-    virtual uint32_t CalcNumInstructions(std::vector<uint16_t> const& controls) noexcept;          \
+    virtual uint32_t CalcNumInstructions(Memory const& memory) noexcept;                           \
     virtual void     DumpPCs(Memory const& memory, std::ostream& ostream) override;                \
     virtual void     DumpRegisters(Memory const& memory, std::ostream& stream) override;           \
     virtual void     DumpMemory(Memory const& memory, Range range, std::ostream& stream) override;
@@ -281,7 +281,7 @@ using HandlerPtr = std::unique_ptr<Handler>;
 #define HANDLER_IS_TERMINATED(ClassName) bool ClassName::IsTerminated(Memory const& memory) noexcept
 
 #define HANDLER_CALC_NUM_INSTRS(ClassName)                                                         \
-    uint32_t ClassName::CalcNumInstructions(std::vector<uint16_t> const& controls) noexcept
+    uint32_t ClassName::CalcNumInstructions(Memory const& memory) noexcept
 
 #define HANDLER_DUMP_PCS(ClassName)                                                                \
     void ClassName::DumpPCs(Memory const& memory, std::ostream& stream)
