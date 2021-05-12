@@ -180,7 +180,7 @@ int main(int argc, char* argv[])
         TickTockResult result = TickTockResult::Success;
 
         uint32_t i, j = 0;
-        for (i = 1; j < options.numInstructions && emulator.IsTerminated(memory); ++i)
+        for (i = 1; j < options.numInstructions && !emulator.IsTerminated(memory); ++i)
         {
             result = emulator.TickTock(memory, j);
             if (result != TickTockResult::Success)
