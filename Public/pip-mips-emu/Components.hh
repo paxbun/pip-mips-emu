@@ -246,7 +246,10 @@ using HandlerPtr = std::unique_ptr<Handler>;
 #define HANDLER_DECLARE_FUNCTIONS()                                                                \
   public:                                                                                          \
     virtual void Initialize(RegisterMap& regMap) override;                                         \
-    virtual bool IsTerminated(Memory const& memory) noexcept;
+    virtual bool IsTerminated(Memory const& memory) noexcept override;                             \
+    virtual void DumpPCs(Memory const& memory, std::ostream& ostream) override;                    \
+    virtual void DumpRegisters(Memory const& memory, std::ostream& stream) override;               \
+    virtual void DumpMemory(Memory const& memory, Range range, std::ostream& stream) override;
 
 #define HANDLER_INIT(ClassName) void ClassName::Initialize(RegisterMap& regMap)
 
