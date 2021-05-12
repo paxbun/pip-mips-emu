@@ -64,7 +64,16 @@ struct Address
 };
 
 /// <summary>
-/// Memory represents a state of the device at the specific time point.
+/// Represents a range in the memory. Note that <c>end</c> is inclusive.
+/// </summary>
+struct Range
+{
+    Address begin;
+    Address end;
+};
+
+/// <summary>
+/// Represents a state of the device at the specific time point.
 /// </summary>
 class Memory
 {
@@ -108,11 +117,6 @@ class Memory
     Memory& operator=(Memory&&) noexcept = default;
 
   public:
-    /// <summary>
-    /// Returns <c>true</c> if PC is at the end of the text segment.
-    /// </summary>
-    bool IsTerminated() const noexcept;
-
     /// <summary>
     /// Loads data to the given segment.
     /// </summary>
