@@ -16,6 +16,12 @@ class DefaultHandler : public Handler
     uint32_t EX_MEM_PC;
     uint32_t MEM_WB_PC;
     uint32_t WB_PC;
+
+    uint32_t IF_ID_Instr;
+    uint32_t ID_EX_Instr;
+    uint32_t EX_MEM_Instr;
+    uint32_t MEM_WB_Instr;
+    uint32_t WB_Instr;
 };
 
 enum class NextPCType : uint16_t
@@ -23,6 +29,14 @@ enum class NextPCType : uint16_t
     AdvancedPC   = 0,
     JumpResult   = 1,
     BranchResult = 2,
+    NotMutated   = 3,
+};
+
+enum class PipelineState : uint16_t
+{
+    Normal  = 0,
+    Stalled = 1,
+    Flushed = 2,
 };
 
 class NextPCController : public Controller
@@ -35,8 +49,12 @@ class NextPCController : public Controller
     uint32_t EX_MEM_Instr;
     uint32_t EX_MEM_ALUResult;
 
+    uint32_t ID_EX_MemRead;
+    uint32_t ID_EX_Reg2;
+
     // Signals
     uint32_t nextPCType;
+    uint32_t pipelineState;
 };
 
 class StallController : public Controller
@@ -62,6 +80,7 @@ class InstructionFetch : public Datapath
 
     // Signals
     uint32_t nextPCType;
+    uint32_t pipelineState;
 };
 
 class InstructionDecode : public Datapath
@@ -91,6 +110,9 @@ class InstructionDecode : public Datapath
     uint32_t ID_EX_Reg1;
     uint32_t ID_EX_Reg2;
     uint32_t ID_EX_Reg3;
+
+    // Signals
+    uint32_t pipelineState;
 };
 
 class Execution : public Datapath
@@ -190,6 +212,7 @@ class WriteBack : public Datapath
 
     // Registers to forward
     uint32_t WB_PC;
+    uint32_t WB_Instr;
 };
 
 #endif

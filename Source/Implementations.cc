@@ -34,6 +34,12 @@ HANDLER_INIT(DefaultHandler)
     REGISTER_READ(EX_MEM_PC);
     REGISTER_READ(MEM_WB_PC);
     REGISTER_READ(WB_PC);
+
+    REGISTER_READ(IF_ID_Instr);
+    REGISTER_READ(ID_EX_Instr);
+    REGISTER_READ(EX_MEM_Instr);
+    REGISTER_READ(MEM_WB_Instr);
+    REGISTER_READ(WB_Instr);
 }
 
 HANDLER_IS_TERMINATED(DefaultHandler)
@@ -46,22 +52,23 @@ HANDLER_DUMP_PCS(DefaultHandler)
 {
     std::ios_base::fmtflags flags = stream.flags();
 
-    uint32_t registers[] = { IF_ID_PC, ID_EX_PC, EX_MEM_PC, MEM_WB_PC, WB_PC };
+    uint32_t registers[]    = { IF_ID_PC, ID_EX_PC, EX_MEM_PC, MEM_WB_PC, WB_PC };
+    uint32_t instructions[] = { IF_ID_Instr, ID_EX_Instr, EX_MEM_Instr, MEM_WB_Instr, WB_Instr };
 
     stream << "Current pipeline PC state:\n";
 
-    bool first = true;
-    for (uint32_t reg : registers)
+    for (int i = 0; i < 5; ++i)
     {
-        if (first)
+        if (i == 0)
             stream << '{';
         else
             stream << '|';
 
-        first = false;
+        uint32_t const reg   = registers[i];
+        uint32_t const instr = instructions[i];
 
         uint32_t const content = memory.GetRegister(reg);
-        if (content)
+        if (content && instr)
             stream << std::hex << content;
     }
     stream << "}\n";
@@ -118,32 +125,51 @@ CONTROLLER_INIT(NextPCController)
     REGISTER_READ(EX_MEM_Instr);
     REGISTER_READ(EX_MEM_ALUResult);
 
+    REGISTER_READ(ID_EX_MemRead);
+    REGISTER_READ(ID_EX_Reg2);
+
     MAKE_SIGNAL(nextPCType);
+    MAKE_SIGNAL(pipelineState);
 }
 
 CONTROLLER_EXEC(NextPCController)
 {
     DEFINE_CONTROLS();
 
-    uint32_t if_id_instr     = memory.GetRegister(IF_ID_Instr);
-    uint32_t if_id_operation = (if_id_instr >> 26) & 0b111111;
-    uint32_t if_id_function  = (if_id_instr >> 0) & 0b111111;
+    uint32_t const if_id_instr = memory.GetRegister(IF_ID_Instr);
+    /*uint32_t const if_id_operation = (if_id_instr >> 26) & 0b111111;
+    uint32_t const if_id_function  = (if_id_instr >> 0) & 0b111111;
     if (if_id_function == 0 && IsOneOf(if_id_function, JRFormatFn::JR))
     {
         ADD_CONTROL((Control::New(nextPCType, NextPCType::JumpResult)));
         RETURN_CONTROLS();
     }
 
-    uint32_t ex_mem_instr     = memory.GetRegister(EX_MEM_Instr);
-    uint32_t ex_mem_aluResult = memory.GetRegister(EX_MEM_ALUResult);
-    uint32_t ex_mem_operation = (ex_mem_instr >> 26) & 0b111111;
+    uint32_t const ex_mem_instr     = memory.GetRegister(EX_MEM_Instr);
+    uint32_t const ex_mem_aluResult = memory.GetRegister(EX_MEM_ALUResult);
+    uint32_t const ex_mem_operation = (ex_mem_instr >> 26) & 0b111111;
     if (ex_mem_aluResult && IsOneOf(ex_mem_operation, BIFormatOp::BEQ, BIFormatOp::BNE))
     {
         ADD_CONTROL((Control::New(nextPCType, NextPCType::BranchResult)));
         RETURN_CONTROLS();
+    }*/
+
+    uint32_t const id_ex_memRead = memory.GetRegister(ID_EX_MemRead);
+    uint32_t const if_id_reg1    = (if_id_instr >> 26) & 0b11111;
+    uint32_t const if_id_reg2    = (if_id_instr >> 21) & 0b11111;
+    uint32_t const id_ex_reg2    = memory.GetRegister(ID_EX_Reg2);
+    if (id_ex_memRead && (if_id_reg1 == id_ex_reg2 || if_id_reg2 == id_ex_reg2))
+    {
+        // load-use stall
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::NotMutated)));
+        ADD_CONTROL((Control::New(pipelineState, PipelineState::Stalled)));
+    }
+    else
+    {
+        ADD_CONTROL((Control::New(nextPCType, NextPCType::AdvancedPC)));
+        ADD_CONTROL((Control::New(pipelineState, PipelineState::Normal)));
     }
 
-    ADD_CONTROL((Control::New(nextPCType, NextPCType::AdvancedPC)));
     RETURN_CONTROLS();
 }
 
@@ -162,6 +188,7 @@ DATAPATH_INIT(InstructionFetch)
     REGISTER_WRITE(IF_ID_Instr);
 
     SIGNAL(nextPCType);
+    SIGNAL(pipelineState);
 }
 
 DATAPATH_EXEC(InstructionFetch)
@@ -171,21 +198,26 @@ DATAPATH_EXEC(InstructionFetch)
     uint32_t const pcValue = memory.GetRegister(PC);
     if (pcValue >= memory.GetTextSize())
     {
+        // program is terminated
         ADD_DELTA((Delta::Register(IF_ID_NextPC, 0)));
         ADD_DELTA((Delta::Register(IF_ID_Instr, 0)));
+        RETURN_DELTAS();
     }
-    else
+
     {
         uint32_t const instruction = memory.GetWord(Address::MakeFromWord(pcValue));
         uint32_t const newPCValue  = pcValue + 4;
 
         ADD_DELTA((Delta::Conditioned(PC, newPCValue, nextPCType, NextPCType::AdvancedPC)));
-        ADD_DELTA((Delta::Register(IF_ID_PC, pcValue)));
-        ADD_DELTA((Delta::Register(IF_ID_NextPC, newPCValue)));
-        ADD_DELTA((Delta::Register(IF_ID_Instr, instruction)));
-    }
 
-    RETURN_DELTAS();
+        ADD_DELTA((Delta::Conditioned(IF_ID_PC, pcValue, pipelineState, PipelineState::Normal)));
+        ADD_DELTA(
+            (Delta::Conditioned(IF_ID_NextPC, newPCValue, pipelineState, PipelineState::Normal)));
+        ADD_DELTA(
+            (Delta::Conditioned(IF_ID_Instr, instruction, pipelineState, PipelineState::Normal)));
+        // ADD_DELTA((Delta::Conditioned(IF_ID_Instr, instruction, 0, PipelineState::Flushed)));
+        RETURN_DELTAS();
+    }
 }
 
 #pragma endregion InstructionFetch
@@ -216,6 +248,8 @@ DATAPATH_INIT(InstructionDecode)
     REGISTER_WRITE(ID_EX_Imm);
     REGISTER_WRITE(ID_EX_Reg2);
     REGISTER_WRITE(ID_EX_Reg3);
+
+    SIGNAL(pipelineState);
 }
 
 DATAPATH_EXEC(InstructionDecode)
@@ -224,9 +258,10 @@ DATAPATH_EXEC(InstructionDecode)
 
     FORWARD_REGISTER(IF_ID_PC, ID_EX_PC);
     FORWARD_REGISTER(IF_ID_NextPC, ID_EX_NextPC);
-    FORWARD_REGISTER(IF_ID_Instr, ID_EX_Instr);
 
     uint32_t const instruction = memory.GetRegister(IF_ID_Instr);
+    ADD_DELTA(Delta::Conditioned(ID_EX_Instr, instruction, pipelineState, PipelineState::Normal));
+    ADD_DELTA(Delta::Conditioned(ID_EX_Instr, 0, pipelineState, PipelineState::Stalled));
 
     uint32_t regWrite = 0, memWrite = 0, memRead = 0;
 
@@ -267,9 +302,13 @@ DATAPATH_EXEC(InstructionDecode)
     uint32_t const register1Value = memory.GetRegister(register1);
     uint32_t const register2Value = memory.GetRegister(register2);
 
-    ADD_DELTA((Delta::Register(ID_EX_RegWrite, regWrite)));
-    ADD_DELTA((Delta::Register(ID_EX_MemWrite, memWrite)));
-    ADD_DELTA((Delta::Register(ID_EX_MemRead, memRead)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_RegWrite, regWrite, pipelineState, PipelineState::Normal)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_MemWrite, memWrite, pipelineState, PipelineState::Normal)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_MemRead, memRead, pipelineState, PipelineState::Normal)));
+
+    ADD_DELTA((Delta::Conditioned(ID_EX_RegWrite, 0, pipelineState, PipelineState::Stalled)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_MemWrite, 0, pipelineState, PipelineState::Stalled)));
+    ADD_DELTA((Delta::Conditioned(ID_EX_MemRead, 0, pipelineState, PipelineState::Stalled)));
 
     ADD_DELTA((Delta::Register(ID_EX_Reg1Value, register1Value)));
     ADD_DELTA((Delta::Register(ID_EX_Reg2Value, register2Value)));
@@ -558,6 +597,7 @@ DATAPATH_INIT(WriteBack)
     REGISTER_READ(MEM_WB_ReadData);
 
     REGISTER_WRITE(WB_PC);
+    REGISTER_WRITE(WB_Instr);
 }
 
 DATAPATH_EXEC(WriteBack)
@@ -565,6 +605,7 @@ DATAPATH_EXEC(WriteBack)
     DEFINE_DELTAS();
 
     FORWARD_REGISTER(MEM_WB_PC, WB_PC);
+    FORWARD_REGISTER(MEM_WB_Instr, WB_Instr);
 
     uint32_t const instruction = memory.GetRegister(MEM_WB_Instr);
     uint32_t const regWrite    = memory.GetRegister(MEM_WB_RegWrite);
