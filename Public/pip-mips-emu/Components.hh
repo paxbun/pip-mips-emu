@@ -69,9 +69,16 @@ struct Delta
         return Delta { idx, value, 0, 0, Type::Register };
     }
 
-    static Delta Conditioned(uint32_t idx, uint32_t value, uint32_t signal, uint16_t condition)
+    template <
+        typename ConditionType,
+        std::enable_if_t<
+            (std::is_enum_v<
+                 ConditionType> && std::is_same_v<std::underlying_type_t<ConditionType>, uint16_t>)
+                || (std::is_same_v<ConditionType, uint16_t>),
+            int> = 0>
+    static Delta Conditioned(uint32_t idx, uint32_t value, uint32_t signal, ConditionType condition)
     {
-        return Delta { idx, value, signal, condition, Type::Conditioned };
+        return Delta { idx, value, signal, static_cast<uint16_t>(condition), Type::Conditioned };
     }
 
     static Delta MemoryWord(uint32_t address, uint32_t value)
@@ -164,6 +171,18 @@ struct Control
 {
     uint32_t signal;
     uint16_t value;
+
+    template <
+        typename ConditionType,
+        std::enable_if_t<
+            (std::is_enum_v<
+                 ConditionType> && std::is_same_v<std::underlying_type_t<ConditionType>, uint16_t>)
+                || (std::is_same_v<ConditionType, uint16_t>),
+            int> = 0>
+    static Control New(uint32_t signal, ConditionType condition)
+    {
+        return Control { signal, static_cast<uint16_t>(condition) };
+    }
 };
 
 /// <summary>
@@ -192,7 +211,7 @@ using ControllerPtr = std::unique_ptr<Controller>;
 #define CONTROLLER_DECLARE_FUNCTIONS()                                                             \
   public:                                                                                          \
     virtual void                 Initialize(RegisterMap& regMap, SignalMap& sigMap) override;      \
-    virtual std::vector<Control> Execute(Memory const& memory) override;
+    virtual std::vector<Control> Execute(Memory const& memory) const override;
 
 #define CONTROLLER_INIT(ClassName)                                                                 \
     void ClassName::Initialize(RegisterMap& regMap, SignalMap& sigMap)
