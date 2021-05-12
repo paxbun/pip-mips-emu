@@ -47,6 +47,12 @@ class Emulator
     // std::unordered_map<std::string, uint32_t> _namedSignals;
     std::vector<uint16_t> _controls;
 
+  public:
+    HandlerPtr const& GetHandler() const
+    {
+        return _handler;
+    }
+
   private:
     Emulator(std::vector<std::pair<DatapathPtr, TickTockType>>&& datapaths,
              std::vector<ControllerPtr>&&                        controllers,

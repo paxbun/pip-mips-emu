@@ -224,6 +224,21 @@ class Handler
     /// Returns <c>true</c> if the program is terminated.
     /// </summary>
     virtual bool IsTerminated(Memory const& memory) noexcept = 0;
+
+    /// <summary>
+    /// Prints contents of PCs in each pipeline stage.
+    /// </summary>
+    virtual void DumpPCs(Memory const& memory, std::ostream& ostream) = 0;
+
+    /// <summary>
+    /// Prints contents of r0 - r31 and PC.
+    /// </summary>
+    virtual void DumpRegisters(Memory const& memory, std::ostream& stream) = 0;
+
+    /// <summary>
+    /// Prints contents in the RAM.
+    /// </summary>
+    virtual void DumpMemory(Memory const& memory, Range range, std::ostream& stream) = 0;
 };
 
 using HandlerPtr = std::unique_ptr<Handler>;
@@ -236,5 +251,14 @@ using HandlerPtr = std::unique_ptr<Handler>;
 #define HANDLER_INIT(ClassName) void ClassName::Initialize(RegisterMap& regMap)
 
 #define HANDLER_IS_TERMINATED(ClassName) bool ClassName::IsTerminated(Memory const& memory)
+
+#define HANDLER_DUMP_PCS(ClassName)                                                                \
+    void ClassName::DumpPCs(Memory const& memory, std::ostream& ostream)
+
+#define HANDLER_DUMP_REGISTERS(ClassName)                                                          \
+    void ClassName::DumpRegisters(Memory const& memory, std::ostream& stream)
+
+#define HANDLER_DUMP_MEMORY(ClassName)                                                             \
+    void ClassName::DumpMemory(Memory const& memory, Range range, std::ostream& stream)
 
 #endif
