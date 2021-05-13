@@ -1,6 +1,6 @@
 # Simple Pipelined MIPS Emulator
 
-Simple Pipelined MIPS emulator implementation.
+Simple Pipelined MIPS emulator implementation. Please read [report.pdf](report.pdf) for more information.
 
 # License
 
