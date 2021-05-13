@@ -740,13 +740,15 @@ TEST(ATPEmulationTest, SimpleLoadUse)
 
     auto [emulator, memory] = MakeDefaultEmulator(std::move(file.text), std::move(file.data), true);
 
-    uint32_t j = 0;
+    uint32_t i = 0, j = 0;
     while (!emulator.IsTerminated(memory))
     {
         auto result = emulator.TickTock(memory, j);
         ASSERT_EQ(result, TickTockResult::Success);
+        ++i;
     }
 
+    ASSERT_EQ(i, 15);
     ASSERT_EQ(j, 9);
     ASSERT_EQ(memory.GetWord(Address::MakeData(0)), 0xabcdefab);
     ASSERT_EQ(memory.GetWord(Address::MakeData(4)), 0xabcdef00);
@@ -765,13 +767,15 @@ TEST(ANTPEmulationTest, SimpleLoadUse)
     auto [emulator, memory]
         = MakeDefaultEmulator(std::move(file.text), std::move(file.data), false);
 
-    uint32_t j = 0;
+    uint32_t i = 0, j = 0;
     while (!emulator.IsTerminated(memory))
     {
         auto result = emulator.TickTock(memory, j);
         ASSERT_EQ(result, TickTockResult::Success);
+        ++i;
     }
 
+    ASSERT_EQ(i, 15);
     ASSERT_EQ(j, 9);
     ASSERT_EQ(memory.GetWord(Address::MakeData(0)), 0xabcdefab);
     ASSERT_EQ(memory.GetWord(Address::MakeData(4)), 0xabcdef00);
