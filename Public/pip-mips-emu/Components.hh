@@ -105,6 +105,9 @@ enum class TickTockType
 class Datapath
 {
   public:
+    virtual ~Datapath() = default;
+
+  public:
     /// <summary>
     /// Implementers must create named registers and signals in this function. The indices will be
     /// assigned automatically when <c>Datapath::Initialize</c> is called for all <c>Datapath</c>
@@ -191,6 +194,9 @@ struct Control
 class Controller
 {
   public:
+    virtual ~Controller() = default;
+
+  public:
     /// <summary>
     /// Implementers must create named registers and signals in this function. The indices will be
     /// assigned automatically when <c>Controller::Initialize</c> is called for all
@@ -232,6 +238,9 @@ using ControllerPtr = std::unique_ptr<Controller>;
 /// </summary>
 class Handler
 {
+  public:
+    virtual ~Handler() = default;
+
   public:
     /// <summary>
     /// Implementers must create named registers in this function. The indices will be
