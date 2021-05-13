@@ -209,10 +209,8 @@ int main(int argc, char* argv[])
 
         std::cout << "===== Completion cycle: " << (i - 1) << " =====\n";
 
-        if (options.dumpPcEachTickTock)
-        {
-            handler->DumpPCs(memory, std::cout);
-        }
+        handler->DumpPCs(memory, std::cout);
+        std::cout << '\n';
 
         handler->DumpRegisters(memory, std::cout);
         std::cout << '\n';

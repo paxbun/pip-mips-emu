@@ -88,7 +88,7 @@ HANDLER_DUMP_PCS(DefaultHandler)
 
         uint32_t const content = memory.GetRegister(reg);
         if (content && memory.GetRegister(instr))
-            stream << std::hex << std::min(content, maxPCValue);
+            stream << "0x" << std::hex << std::min(content, maxPCValue);
     }
     stream << "}\n";
 
