@@ -110,6 +110,7 @@ TEST(ATPEmulationTest, Fibonacci)
         auto result = emulator.TickTock(memory, j);
         ASSERT_EQ(result, TickTockResult::Success);
     }
+    ASSERT_EQ(j, 52);
 
     {
         // clang-format off
@@ -142,6 +143,7 @@ TEST(ANTPEmulationTest, Fibonacci)
         auto result = emulator.TickTock(memory, j);
         ASSERT_EQ(result, TickTockResult::Success);
     }
+    ASSERT_EQ(j, 52);
 
     {
         // clang-format off
@@ -576,6 +578,7 @@ TEST(ATPEmulationTest, SimpleLoop)
         auto result = emulator.TickTock(memory, j);
         ASSERT_EQ(result, TickTockResult::Success);
     }
+    ASSERT_EQ(j, 47);
 
     ASSERT_EQ(memory.GetRegister(8), -6);
 }
@@ -598,6 +601,7 @@ TEST(ANTPEmulationTest, SimpleLoop)
         auto result = emulator.TickTock(memory, j);
         ASSERT_EQ(result, TickTockResult::Success);
     }
+    ASSERT_EQ(j, 47);
 
     ASSERT_EQ(memory.GetRegister(8), -6);
 }
@@ -661,6 +665,7 @@ TEST(ATPEmulationTest, Strlen)
         auto result = emulator.TickTock(memory, j);
         ASSERT_EQ(result, TickTockResult::Success);
     }
+    ASSERT_EQ(j, 57);
 
     ASSERT_EQ(memory.GetRegister(8), 13);
 }
@@ -683,6 +688,7 @@ TEST(ANTPEmulationTest, Strlen)
         auto result = emulator.TickTock(memory, j);
         ASSERT_EQ(result, TickTockResult::Success);
     }
+    ASSERT_EQ(j, 57);
 
     ASSERT_EQ(memory.GetRegister(8), 13);
 }
@@ -741,6 +747,7 @@ TEST(ATPEmulationTest, SimpleLoadUse)
         ASSERT_EQ(result, TickTockResult::Success);
     }
 
+    ASSERT_EQ(j, 9);
     ASSERT_EQ(memory.GetWord(Address::MakeData(0)), 0xabcdefab);
     ASSERT_EQ(memory.GetWord(Address::MakeData(4)), 0xabcdef00);
     ASSERT_EQ(memory.GetWord(Address::MakeData(8)), 0xabcdef00);
@@ -765,7 +772,135 @@ TEST(ANTPEmulationTest, SimpleLoadUse)
         ASSERT_EQ(result, TickTockResult::Success);
     }
 
+    ASSERT_EQ(j, 9);
     ASSERT_EQ(memory.GetWord(Address::MakeData(0)), 0xabcdefab);
     ASSERT_EQ(memory.GetWord(Address::MakeData(4)), 0xabcdef00);
     ASSERT_EQ(memory.GetWord(Address::MakeData(8)), 0xabcdef00);
+}
+
+/*
+    .data
+str1:
+    .word 0x48656c6c
+    .word 0x6f200000
+    .word 0
+    .word 0
+str2:
+    .word 0x776f726c
+    .word 0x64210000
+    .text
+main:
+    la     $8,     str1
+    la     $9,     str2
+find_end:
+    lb     $1,     0($8)
+    beq    $0,     $1,     loop
+    addiu  $8,     $8,     1
+    j      find_end
+loop:
+    lb     $10,    0($9)
+    sb     0($8),  $10
+    addiu  $8,     $8,     1
+    addiu  $9,     $9,     1
+    bne    $0,     $10,    loop
+*/
+
+/*
+    char str1[16] = "Hello ";
+    char str2[8] = "world!";
+    int main() {
+        strcat(str1, str2);
+    }
+*/
+
+char const _strcat[] = R"===(
+    0x30
+    0x18
+    0x3c081000
+    0x3c091000
+    0x35290010
+    0x81010000
+    0x10010002
+    0x25080001
+    0x8100003
+    0x812a0000
+    0xa10a0000
+    0x25080001
+    0x25290001
+    0x140afffb
+    0x48656c6c
+    0x6f200000
+    0x0
+    0x0
+    0x776f726c
+    0x64210000
+)===";
+
+TEST(ATPEmulationTest, Strcat)
+{
+    std::istringstream iss { _strcat };
+
+    FileReadResult result = ReadFile(iss);
+    ASSERT_TRUE(std::holds_alternative<CanRead>(result));
+
+    CanRead file = std::get<CanRead>(result);
+
+    auto [emulator, memory] = MakeDefaultEmulator(std::move(file.text), std::move(file.data), true);
+
+    uint32_t j = 0;
+    while (!emulator.IsTerminated(memory))
+    {
+        auto result = emulator.TickTock(memory, j);
+        ASSERT_EQ(result, TickTockResult::Success);
+    }
+    ASSERT_EQ(j, 64);
+
+    {
+        // clang-format off
+        Address address = Address::MakeData(0);
+        std::vector<uint8_t> expected {
+            'H', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!', 0, 0, 0, 0
+        };
+
+        for (size_t i = 0; i < 16; ++i) {
+            ASSERT_EQ(memory.GetByte(address), expected[i]);
+            address.offset += 1;
+        }
+        // clang-format on
+    }
+}
+
+TEST(ANTPEmulationTest, Strcat)
+{
+    std::istringstream iss { _strcat };
+
+    FileReadResult result = ReadFile(iss);
+    ASSERT_TRUE(std::holds_alternative<CanRead>(result));
+
+    CanRead file = std::get<CanRead>(result);
+
+    auto [emulator, memory]
+        = MakeDefaultEmulator(std::move(file.text), std::move(file.data), false);
+
+    uint32_t j = 0;
+    while (!emulator.IsTerminated(memory))
+    {
+        auto result = emulator.TickTock(memory, j);
+        ASSERT_EQ(result, TickTockResult::Success);
+    }
+    ASSERT_EQ(j, 64);
+
+    {
+        // clang-format off
+        Address address = Address::MakeData(0);
+        std::vector<uint8_t> expected {
+            'H', 'e', 'l', 'l', 'o', ' ', 'w', 'o', 'r', 'l', 'd', '!', 0, 0, 0, 0
+        };
+
+        for (size_t i = 0; i < 16; ++i) {
+            ASSERT_EQ(memory.GetByte(address), expected[i]);
+            address.offset += 1;
+        }
+        // clang-format on
+    }
 }
